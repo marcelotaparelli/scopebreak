@@ -9,6 +9,8 @@ export interface WeaponConfig {
   fireCooldownMs: number;
   reloadMs: number;
   adsMs: number;
+  /** RMB → snap-precision delay: LMB buffered in this window auto-fires here. */
+  snapPrecisionMs: number;
   bodyDamage: number;
   headDamage: number;
   hipSpreadDeg: number;
@@ -28,6 +30,7 @@ export const weaponConfigs: Record<WeaponId, WeaponConfig> = {
     fireCooldownMs: 1050,
     reloadMs: 2100,
     adsMs: 130,
+    snapPrecisionMs: 45,
     bodyDamage: 80,
     headDamage: 150,
     hipSpreadDeg: 5.5,
@@ -45,6 +48,7 @@ export const weaponConfigs: Record<WeaponId, WeaponConfig> = {
     fireCooldownMs: 1500,
     reloadMs: 2800,
     adsMs: 220,
+    snapPrecisionMs: 80,
     bodyDamage: 95,
     headDamage: 160,
     hipSpreadDeg: 6.5,
@@ -62,6 +66,7 @@ export const weaponConfigs: Record<WeaponId, WeaponConfig> = {
     fireCooldownMs: 340,
     reloadMs: 2000,
     adsMs: 140,
+    snapPrecisionMs: 45,
     bodyDamage: 34,
     headDamage: 70,
     hipSpreadDeg: 4.5,

@@ -7,7 +7,7 @@ import { Telemetry } from "../debug/Telemetry.js";
 import { CameraController } from "../player/CameraController.js";
 import { MovementController } from "../player/MovementController.js";
 import { classifyState } from "../player/PlayerState.js";
-import { adsSpreadDeg, detectSkillEvents, isPrecisionReady } from "../player/movementRules.js";
+import { adsSpreadDeg, decideLmbEdge, detectSkillEvents, isPrecisionReady, resolvePendingQuickshot } from "../player/movementRules.js";
 import { HitDetection } from "../combat/HitDetection.js";
 import { FFAMode } from "../modes/FFAMode.js";
 import { TrainingMode } from "../modes/TrainingMode.js";
@@ -62,6 +62,9 @@ export class Game {
   private nextBotDuelMs = 0;
   private matchEndShown = false;
   private occlusionRay = new THREE.Raycaster();
+  // Snap Precision buffer: one LMB edge → at most one shot, never lost.
+  private pendingQuickLmbMs = -1;
+  private pendingQuickAdsStartMs = -1;
 
   // HUD refs
   private elAmmoMag!: HTMLElement;
@@ -250,6 +253,7 @@ export class Game {
         const id: WeaponId | undefined = weaponOrder[idx];
         if (id) {
           this.weapon.switchTo(id, performance.now());
+          this.clearPendingQuickshot();
           this.adsWasPrecise = false;
           this.refreshWeaponBar();
         }
@@ -329,7 +333,7 @@ export class Game {
 
     // camera pose
     const b = this.move.body;
-    this.camera.position.set(b.x, b.y + this.cam.eyeHeight(this.move.sliding), b.z);
+    this.camera.position.set(b.x, b.y + this.cam.eyeHeightSmooth(this.move.sliding, dt), b.z);
     this.cam.update(this.camera, dt, {
       ads: this.weapon.adsActive,
       scopeFov: this.weapon.config.scopeFov,
@@ -361,18 +365,21 @@ export class Game {
       for (const t of this.targets) t.update(nowMs, nowMs / 1000);
     }
 
-    // shooting
-    const wantFire = this.weapon.config.boltAction ? this.triggerEdge : this.triggerHeld;
-    if (this.playing && wantFire && this.playerAliveOrTraining()) {
+    // shooting: LMB is NEVER ignored.
+    // - edge (one click) → immediate shot, or buffered snap shot when ADS just started
+    // - semi-auto hold (Phantom) → cadence fire while held
+    if (this.triggerEdge) {
       this.triggerEdge = false;
-      if (this.weapon.canFireNow(nowMs)) {
-        if (this.appMode === "ffa") this.fireFFA(nowMs, precise);
-        else this.fire(nowMs, precise);
-      } else if (this.weapon.ammoInMag <= 0 && !this.weapon.reloading) {
-        this.combatFx.dryFire();
-        this.weapon.startReload(nowMs);
-        this.triggerEdge = false;
-      }
+      if (this.playing && this.playerAliveOrTraining()) this.handleLmbEdge(nowMs);
+    }
+    this.updatePendingQuickshot(nowMs);
+    if (
+      this.playing && this.playerAliveOrTraining() &&
+      !this.weapon.config.boltAction && this.triggerHeld && this.pendingQuickLmbMs < 0 &&
+      this.weapon.canFireNow(nowMs)
+    ) {
+      if (this.appMode === "ffa") this.fireFFA(nowMs);
+      else this.fire(nowMs);
     }
 
     if (this.appMode === "ffa") this.updateFFA(dt, nowMs);
@@ -387,21 +394,84 @@ export class Game {
     this.debug.recordFrame(performance.now() - frameStart);
   }
 
-  private fire(nowMs: number, precise: boolean): void {
+  // ---------------- snap precision ----------------
+
+  private clearPendingQuickshot(): void {
+    this.pendingQuickLmbMs = -1;
+    this.pendingQuickAdsStartMs = -1;
+  }
+
+  /** Spread right now: hip when unscoped, snap curve once ADS starts. */
+  private currentAdsSpread(nowMs: number): number {
+    const w = this.weapon;
+    const hip = Math.max(gameplayConfig.hipfireSpreadDeg, w.config.hipSpreadDeg);
+    if (!w.adsActive) return hip;
+    return adsSpreadDeg({
+      adsElapsedMs: w.adsElapsedMs(nowMs),
+      snapMs: w.config.snapPrecisionMs,
+      hipSpreadDeg: hip,
+      preciseSpreadDeg: gameplayConfig.adsSpreadDeg,
+    });
+  }
+
+  private tryFireNow(nowMs: number): void {
+    if (this.weapon.canFireNow(nowMs)) {
+      if (this.appMode === "ffa") this.fireFFA(nowMs);
+      else this.fire(nowMs);
+    } else if (this.weapon.ammoInMag <= 0 && !this.weapon.reloading) {
+      this.combatFx.dryFire();
+      this.weapon.startReload(nowMs);
+    }
+    // NOTE: bolt cooldown drops the click by design (cycling identity) —
+    // the buffer bridges ADS timing, never the weapon cycle.
+  }
+
+  /**
+   * One LMB click, routed purely:
+   * - RMB just started ADS (within buffer) + snap not ready → buffer until snap
+   * - otherwise → immediate shot (hipfire, or precise when already scoped)
+   */
+  private handleLmbEdge(nowMs: number): void {
+    const w = this.weapon;
+    const sinceAdsStart = nowMs - w.lastAdsStartMs;
+    const decision = decideLmbEdge({
+      sinceAdsStartMs: sinceAdsStart,
+      adsElapsedMs: w.adsActive ? w.adsElapsedMs(nowMs) : sinceAdsStart,
+      quickShotBufferMs: gameplayConfig.quickShotBufferMs,
+      snapPrecisionMs: w.config.snapPrecisionMs,
+    });
+    if (decision === "buffer-quickshot") {
+      this.pendingQuickLmbMs = nowMs;
+      this.pendingQuickAdsStartMs = w.lastAdsStartMs;
+      return;
+    }
+    this.tryFireNow(nowMs);
+  }
+
+  /**
+   * Buffered RMB+LMB: fires automatically at ADS-start + snap delay with
+   * ~zero spread — whether RMB is still held (stay scoped) or already
+   * released (tap → snap shot → back to hip).
+   */
+  private updatePendingQuickshot(nowMs: number): void {
+    const state = resolvePendingQuickshot({
+      pendingLmbMs: this.pendingQuickLmbMs,
+      adsStartMs: this.pendingQuickAdsStartMs,
+      snapMs: this.weapon.config.snapPrecisionMs,
+      nowMs,
+    });
+    if (state === "fire") {
+      this.clearPendingQuickshot();
+      if (this.playing && this.playerAliveOrTraining()) this.tryFireNow(nowMs);
+    }
+  }
+
+  private fire(nowMs: number): void {
     this.mode.registerShot();
     this.telemetry.registerShot(this.weapon.currentId);
     this.weapon.consumeShot(nowMs);
 
-    const ads = this.weapon.adsActive;
-    const hip = Math.max(gameplayConfig.hipfireSpreadDeg, this.weapon.config.hipSpreadDeg);
-    const spread = ads
-      ? adsSpreadDeg({
-        adsElapsedMs: this.weapon.adsElapsedMs(nowMs),
-        adsMs: Math.max(gameplayConfig.precisionWindowMs, this.weapon.config.adsMs),
-        hipSpreadDeg: hip,
-        preciseSpreadDeg: gameplayConfig.adsSpreadDeg,
-      })
-      : hip;
+    const spread = this.currentAdsSpread(nowMs);
 
     const origin = this.camera.position.clone();
     const dir = HitDetection.applySpread(this.cam.forwardDir(), spread);
@@ -447,6 +517,7 @@ export class Game {
 
   private enterTraining(): void {
     this.appMode = "training";
+    this.clearPendingQuickshot();
     for (const t of this.targets) t.group.visible = true;
     for (const b of this.bots) this.scene.remove(b.group);
     this.bots = [];
@@ -463,6 +534,7 @@ export class Game {
   private resetFFA(nowMs: number): void {
     this.ffa = new FFAMode("YOU", BOT_NAMES);
     this.ffa.start(nowMs);
+    this.clearPendingQuickshot();
     this.telemetry = new Telemetry();
     this.matchEndShown = false;
     this.elMatchEnd.style.display = "none";
@@ -503,21 +575,12 @@ export class Game {
     return best;
   }
 
-  private fireFFA(nowMs: number, _precise: boolean): void {
+  private fireFFA(nowMs: number): void {
     this.ffa.registerShot(0);
     this.telemetry.registerShot(this.weapon.currentId);
     this.weapon.consumeShot(nowMs);
 
-    const ads = this.weapon.adsActive;
-    const hip = Math.max(gameplayConfig.hipfireSpreadDeg, this.weapon.config.hipSpreadDeg);
-    const spread = ads
-      ? adsSpreadDeg({
-        adsElapsedMs: this.weapon.adsElapsedMs(nowMs),
-        adsMs: Math.max(gameplayConfig.precisionWindowMs, this.weapon.config.adsMs),
-        hipSpreadDeg: hip,
-        preciseSpreadDeg: gameplayConfig.adsSpreadDeg,
-      })
-      : hip;
+    const spread = this.currentAdsSpread(nowMs);
 
     const origin = this.camera.position.clone();
     const dir = HitDetection.applySpread(this.cam.forwardDir(), spread);
@@ -660,6 +723,7 @@ export class Game {
     if (this.playerHealth <= 0) {
       this.playerHealth = 0;
       this.playerAlive = false;
+      this.clearPendingQuickshot();
       this.playerRespawnAtMs = nowMs + this.ffa.respawnMs;
       const ev = this.ffa.registerKill({
         killerIdx, victimIdx: 0, headshot, skills: headshot ? ["headshot"] : [],
@@ -757,11 +821,18 @@ export class Game {
     }
 
     const adsMs = this.playing ? w.adsElapsedMs(nowMs) : 0;
+    const adsProg = w.adsActive
+      ? Math.min(1, adsMs / Math.max(1, w.config.snapPrecisionMs)).toFixed(2)
+      : "—";
+    const snapReady = w.adsActive && adsMs >= w.config.snapPrecisionMs;
     this.debug.updateStats(
       `<div class="stat"><span>grounded</span><b>${this.move.body.grounded}</b></div>` +
       `<div class="stat"><span>state</span><b>${st}</b></div>` +
       `<div class="stat"><span>sliding</span><b>${this.move.sliding}</b></div>` +
       `<div class="stat"><span>ADS</span><b>${w.adsActive} (${adsMs.toFixed(0)}/${precisionMs}ms)</b></div>` +
+      `<div class="stat"><span>ADS progress</span><b>${adsProg}</b></div>` +
+      `<div class="stat"><span>snap</span><b>${snapReady} (${w.config.snapPrecisionMs}ms)</b></div>` +
+      `<div class="stat"><span>pendingQS</span><b>${this.pendingQuickLmbMs >= 0}</b></div>` +
       `<div class="stat"><span>precision</span><b>${precise}</b></div>` +
       `<div class="stat"><span>speed</span><b>${this.move.horizontalSpeed().toFixed(2)} m/s</b></div>` +
       `<div class="stat"><span>maxSpeed(life)</span><b>${this.telemetry.maxSpeedThisLife.toFixed(2)}</b></div>` +

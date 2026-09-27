@@ -18,6 +18,26 @@ export function slideEntrySpeed(entrySpeed: number, boost: number): number {
   return entrySpeed * boost;
 }
 
+/**
+ * Slide boost on valid entry: momentum-based with a floor so Shift
+ * always reads as FASTER. Applied exactly once per slide entry.
+ */
+export function slideBoostSpeed(current: number, multiplier: number, minBoostSpeed: number): number {
+  return Math.max(current * multiplier, minBoostSpeed);
+}
+
+/** Slide-jump takeoff: keep ~all horizontal momentum, own (lower) vertical. */
+export function slideJumpTakeoff(
+  horizontalSpeed: number,
+  momentumRetention: number,
+  verticalForce: number,
+): { horizontal: number; vertical: number } {
+  return {
+    horizontal: horizontalSpeed * momentumRetention,
+    vertical: verticalForce,
+  };
+}
+
 /** Friction-decayed slide speed after dt seconds. */
 export function slideSpeedAfter(current: number, friction: number, dt: number): number {
   return Math.max(0, current - friction * current * dt);
@@ -97,32 +117,64 @@ export function isPrecisionReady(adsElapsedMs: number, windowMs: number): boolea
 }
 
 /**
- * Progressive ADS spread curve (baseline-preserving).
- * Thresholds unchanged: precision-ready still at adsMs.
- * - t=0 → hipSpread (hip fire)
- * - t≈0.4 → hipSpread*0.45 (old mid-transition value, reached fast)
- * - t=1 → preciseSpread (full precision BEFORE visual scope completes)
+ * Progressive ADS spread with SNAP PRECISION (baseline feel preserved,
+ * timing re-tuned for CLICK-CLICK-BANG).
+ * - t=0 → hipSpread (hip fire, wildly imprecise)
+ * - quadratic collapse → ~0 at snapMs (snap precision, practically zero)
+ * - t>=snapMs → preciseSpread (full precision BEFORE visual scope completes)
  * Crosshair alignment untouched: ADS never shifts yaw/pitch.
  */
 export function adsSpreadDeg(args: {
   adsElapsedMs: number;
-  adsMs: number;
+  snapMs: number;
   hipSpreadDeg: number;
   preciseSpreadDeg: number;
 }): number {
-  const { adsMs, hipSpreadDeg, preciseSpreadDeg } = args;
-  if (adsMs <= 0) return preciseSpreadDeg;
-  const t = Math.max(0, Math.min(1, args.adsElapsedMs / adsMs));
-  if (t >= 1) return preciseSpreadDeg;
-  const mid = hipSpreadDeg * 0.45;
-  if (t <= 0.4) {
-    const k = t / 0.4;
-    const eased = 1 - (1 - k) * (1 - k); // fast initial collapse, same endpoints
-    return hipSpreadDeg + (mid - hipSpreadDeg) * eased;
+  const { snapMs, hipSpreadDeg, preciseSpreadDeg } = args;
+  if (snapMs <= 0) return preciseSpreadDeg;
+  if (args.adsElapsedMs >= snapMs) return preciseSpreadDeg;
+  const k = Math.max(0, Math.min(1, args.adsElapsedMs / snapMs));
+  return hipSpreadDeg * (1 - k) * (1 - k);
+}
+
+export type LmbDecision = "fire-now" | "buffer-quickshot";
+export type PendingQuickshot = "idle" | "wait" | "fire";
+
+/**
+ * Pure buffered-shot resolution. A buffered click fires exactly once at
+ * ADS-start + snap delay. Ordering proof: pendingLmb >= adsStart always
+ * (buffer is only set after ADS starts), so the snap instant always lands
+ * within buffer+snap of the click — no linger, no second branch needed.
+ * External invalidation (death/switch/reset) clears the buffer explicitly.
+ */
+export function resolvePendingQuickshot(args: {
+  pendingLmbMs: number; // -1 when no shot buffered
+  adsStartMs: number;
+  snapMs: number;
+  nowMs: number;
+}): PendingQuickshot {
+  if (args.pendingLmbMs < 0) return "idle";
+  if (args.nowMs >= args.adsStartMs + args.snapMs) return "fire";
+  return "wait";
+}
+
+/**
+ * Pure LMB routing for Snap Precision (unit-tested, Game executes it).
+ * - No ADS started (or started long ago) → fire immediately (hip or full ADS).
+ * - ADS started within buffer window but snap not ready → buffer until snap.
+ * - ADS already past snap → fire immediately with ~zero spread.
+ * Exactly one click → at most one shot (caller consumes the edge/pending).
+ */
+export function decideLmbEdge(args: {
+  sinceAdsStartMs: number; // nowMs - lastAdsStartMs (Infinity if ADS never started)
+  adsElapsedMs: number; // time since ADS start (same value; kept explicit for readability)
+  quickShotBufferMs: number;
+  snapPrecisionMs: number;
+}): LmbDecision {
+  if (args.sinceAdsStartMs <= args.quickShotBufferMs && args.adsElapsedMs < args.snapPrecisionMs) {
+    return "buffer-quickshot";
   }
-  const k = (t - 0.4) / 0.6;
-  const eased = k * k; // accelerating reward for learning the timing
-  return mid + (preciseSpreadDeg - mid) * eased;
+  return "fire-now";
 }
 
 export function canFire(nowMs: number, lastShotMs: number, cooldownMs: number): boolean {

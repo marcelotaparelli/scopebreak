@@ -102,8 +102,25 @@ export interface WallProbe {
   nz: number;
 }
 
-/** Cheap horizontal wall proximity probe for wall-kick (4-neighbourhood search). */
-export function probeWalls(
+/**
+ * Headroom check for standing up (e.g. slide exit under a low bar).
+ * True when a capsule of `toHeight` at (x,y,z) fits without intersecting
+ * solid geometry. Floors at/below the feet are ignored.
+ */
+export function hasHeadroom(
+  x: number, y: number, z: number,
+  radius: number, toHeight: number,
+  colliders: AABB[],
+): boolean {
+  const probe: KinematicBody = { x, y, z, vx: 0, vy: 0, vz: 0, radius, height: toHeight, grounded: false };
+  for (const c of colliders) {
+    if (c.maxY <= y + 0.3) continue; // floor, not ceiling
+    if (overlaps(probe, c)) return false;
+  }
+  return true;
+}
+
+/** Cheap horizontal wall proximity probe for wall-kick (4-neighbourhood search). */export function probeWalls(
   x: number, y: number, z: number,
   radius: number, height: number,
   range: number, colliders: AABB[],

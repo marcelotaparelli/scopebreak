@@ -94,14 +94,18 @@ export class DebugPanel {
 
     const s = this.section("SLIDE");
     this.num(s, "minSlideSpeed", () => mc().minimumSlideSpeed, (v) => (mc().minimumSlideSpeed = v), 0, 8, 0.1);
-    this.num(s, "slideFriction", () => mc().slideFriction, (v) => (mc().slideFriction = v), 0, 6, 0.1);
-    this.num(s, "slideControl", () => mc().slideControl, (v) => (mc().slideControl = v), 0, 1, 0.05);
-    this.num(s, "slideBoost", () => mc().slideBoost, (v) => (mc().slideBoost = v), 0.9, 1.4, 0.01);
+    this.num(s, "slideBoostMult", () => mc().slideBoost, (v) => (mc().slideBoost = v), 1, 1.6, 0.01);
+    this.num(s, "minBoostSpeed", () => mc().minimumSlideBoostSpeed, (v) => (mc().minimumSlideBoostSpeed = v), 6, 16, 0.1);
+    this.num(s, "slideFriction", () => mc().slideFriction, (v) => (mc().slideFriction = v), 0, 6, 0.05);
+    this.num(s, "slideSteering", () => mc().slideControl, (v) => (mc().slideControl = v), 0, 1, 0.05);
     this.num(s, "momentumRet", () => mc().momentumRetention, (v) => (mc().momentumRetention = v), 0.5, 1, 0.01);
+    this.num(s, "slideHeight", () => mc().slideHeight, (v) => (mc().slideHeight = v), 0.8, 1.6, 0.05);
+    this.num(s, "slideCamMs", () => mc().slideCameraTransitionMs, (v) => (mc().slideCameraTransitionMs = v), 40, 400, 10);
+    this.num(s, "maxMoveSpeed", () => mc().maxMovementSpeed, (v) => (mc().maxMovementSpeed = v), 12, 30, 0.5);
 
     const sj = this.section("SLIDE JUMP / FLOW / WALL");
-    this.num(sj, "sjHorizMult", () => mc().slideJumpHorizontalMultiplier, (v) => (mc().slideJumpHorizontalMultiplier = v), 0.9, 1.4, 0.01);
-    this.num(sj, "sjVertForce", () => mc().slideJumpVerticalForce, (v) => (mc().slideJumpVerticalForce = v), 4, 14, 0.1);
+    this.num(sj, "sjMomentumRet", () => mc().slideJumpMomentumRetention, (v) => (mc().slideJumpMomentumRetention = v), 0.9, 1.05, 0.01);
+    this.num(sj, "sjVertForce", () => mc().slideJumpVerticalForce, (v) => (mc().slideJumpVerticalForce = v), 3, 10, 0.1);
     this.num(sj, "flowWindowMs", () => mc().flowLandingWindowMs, (v) => (mc().flowLandingWindowMs = v), 50, 500, 10);
     this.num(sj, "flowRet", () => mc().flowLandingRetention, (v) => (mc().flowLandingRetention = v), 0.5, 1, 0.01);
     this.num(sj, "wallHoriz", () => mc().wallKickHorizontalImpulse, (v) => (mc().wallKickHorizontalImpulse = v), 4, 18, 0.5);
@@ -116,6 +120,15 @@ export class DebugPanel {
       this.num(w, `${id}.head`, () => cfg.headDamage, (v) => (cfg.headDamage = v), 20, 200, 1);
       this.num(w, `${id}.cooldown`, () => cfg.fireCooldownMs, (v) => (cfg.fireCooldownMs = v), 100, 2500, 10);
       this.num(w, `${id}.adsMs`, () => cfg.adsMs, (v) => (cfg.adsMs = v), 40, 500, 10);
+    }
+
+    const q = this.section("QUICKSCOPE / SNAP");
+    this.num(q, "quickShotBufferMs", () => gameplayConfig.quickShotBufferMs, (v) => (gameplayConfig.quickShotBufferMs = v), 0, 250, 5);
+    this.num(q, "snapSpread", () => gameplayConfig.adsSpreadDeg, (v) => (gameplayConfig.adsSpreadDeg = v), 0, 2, 0.05);
+    this.num(q, "fullAdsReadyMs", () => gameplayConfig.precisionWindowMs, (v) => (gameplayConfig.precisionWindowMs = v), 0, 400, 5);
+    for (const id of weaponOrder) {
+      const cfg = weaponConfigs[id];
+      this.num(q, `${id}.snapMs`, () => cfg.snapPrecisionMs, (v) => (cfg.snapPrecisionMs = v), 0, 250, 5);
     }
 
     const st = this.section("STATE");

@@ -10,6 +10,7 @@ export class CameraController {
   currentFov = movementConfig.baseFov;
   roll = 0;
   private recoilOffset = 0;
+  private eyeH = movementConfig.standingEyeHeight;
 
   addLook(dx: number, dy: number, ads: boolean): void {
     const s = this.sensitivity * (ads ? this.adsSensitivityScale : 1);
@@ -33,7 +34,18 @@ export class CameraController {
   }
 
   eyeHeight(sliding: boolean): number {
-    return sliding ? 0.95 : 1.62;
+    return sliding ? movementConfig.slideEyeHeight : movementConfig.standingEyeHeight;
+  }
+
+  /**
+   * Smoothed stance height: fast drop into the slide, smooth rise back —
+   * never a camera snap. Settles within slideCameraTransitionMs.
+   */
+  eyeHeightSmooth(sliding: boolean, dt: number): number {
+    const target = sliding ? movementConfig.slideEyeHeight : movementConfig.standingEyeHeight;
+    const lambda = 4.6 / Math.max(0.03, movementConfig.slideCameraTransitionMs / 1000);
+    this.eyeH = THREE.MathUtils.damp(this.eyeH, target, lambda, dt);
+    return this.eyeH;
   }
 
   update(

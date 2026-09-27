@@ -71,23 +71,25 @@ describe("FFA scoring", () => {
   });
 });
 
-describe("ADS progressive spread (baseline-preserving)", () => {
-  test("endpoints match baseline: hip at 0, precise at adsMs", () => {
-    expect(realSpread({ adsElapsedMs: 0, adsMs: 130, hipSpreadDeg: 5.5, preciseSpreadDeg: 0 })).toBeCloseTo(5.5, 5);
-    expect(realSpread({ adsElapsedMs: 130, adsMs: 130, hipSpreadDeg: 5.5, preciseSpreadDeg: 0 })).toBe(0);
-    expect(realSpread({ adsElapsedMs: 999, adsMs: 130, hipSpreadDeg: 5.5, preciseSpreadDeg: 0 })).toBe(0);
+describe("ADS snap spread curve", () => {
+  const HIP = 5.5;
+  const SNAP = 45;
+  test("endpoints: hip at 0, zero at/after snap", () => {
+    expect(realSpread({ adsElapsedMs: 0, snapMs: SNAP, hipSpreadDeg: HIP, preciseSpreadDeg: 0 })).toBeCloseTo(HIP, 5);
+    expect(realSpread({ adsElapsedMs: SNAP, snapMs: SNAP, hipSpreadDeg: HIP, preciseSpreadDeg: 0 })).toBe(0);
+    expect(realSpread({ adsElapsedMs: 999, snapMs: SNAP, hipSpreadDeg: HIP, preciseSpreadDeg: 0 })).toBe(0);
   });
 
-  test("monotonically decreasing and passes old mid value region", () => {
+  test("monotonically decreasing with fast early collapse", () => {
     let prev = Infinity;
-    for (const t of [0, 20, 52, 80, 110, 130]) {
-      const v = realSpread({ adsElapsedMs: t, adsMs: 130, hipSpreadDeg: 5.5, preciseSpreadDeg: 0 });
+    for (const t of [0, 10, 20, 30, 40, 45, 130]) {
+      const v = realSpread({ adsElapsedMs: t, snapMs: SNAP, hipSpreadDeg: HIP, preciseSpreadDeg: 0 });
       expect(v).toBeLessThanOrEqual(prev);
       prev = v;
     }
-    // near 40% of the window spread is close to the old 0.45x mid value
-    const mid = realSpread({ adsElapsedMs: 52, adsMs: 130, hipSpreadDeg: 5.5, preciseSpreadDeg: 0 });
-    expect(mid).toBeCloseTo(5.5 * 0.45, 0);
+    // ~half snap time spread already collapsed hard (skill timing rewarded)
+    const mid = realSpread({ adsElapsedMs: 22, snapMs: SNAP, hipSpreadDeg: HIP, preciseSpreadDeg: 0 });
+    expect(mid).toBeLessThan(HIP * 0.35);
   });
 });
 
