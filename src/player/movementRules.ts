@@ -21,9 +21,27 @@ export function slideEntrySpeed(entrySpeed: number, boost: number): number {
 /**
  * Slide boost on valid entry: momentum-based with a floor so Shift
  * always reads as FASTER. Applied exactly once per slide entry.
+ * Anti-pump: at/above the floor the current speed is PRESERVED as-is —
+ * entering a slide never manufactures speed out of already-fast momentum.
  */
 export function slideBoostSpeed(current: number, multiplier: number, minBoostSpeed: number): number {
+  if (current >= minBoostSpeed) return current;
   return Math.max(current * multiplier, minBoostSpeed);
+}
+
+/**
+ * Flow-landing entry (air → ground + fresh Shift): PRESERVE momentum with
+ * a small landing cost, never boost. Only landings BELOW the floor use the
+ * normal entry rule (bounded lift to the floor constant — no compounding).
+ */
+export function flowSlideSpeed(
+  current: number,
+  retention: number,
+  multiplier: number,
+  minBoostSpeed: number,
+): number {
+  if (current >= minBoostSpeed) return current * retention;
+  return slideBoostSpeed(current, multiplier, minBoostSpeed);
 }
 
 /** Slide-jump takeoff: keep ~all horizontal momentum, own (lower) vertical. */
