@@ -63,7 +63,7 @@ export const movementConfig: MovementConfig = {
 
   minimumSlideSpeed: 3.5,
   slideFriction: 0.4,
-  slideTurnRateDeg: 100,
+  slideTurnRateDeg: 220,
   slideSteerOppositeDeg: 150,
   slideBoostTargetSpeed: 17.0,
   slideBoostStrength: 0.75,

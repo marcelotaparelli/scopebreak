@@ -117,8 +117,42 @@ describe("slide steering: a curve controlled by skill, not a rail", () => {
     const slid = a.filter((x) => x.sliding && x.t >= 1050);
     const turned = slid[slid.length - 1]!.heading;
     expect(turned).toBeLessThanOrEqual(C.slideTurnRateDeg * (slid[slid.length - 1]!.t - 1050 + 10) / 1000 + 1e-6);
-    // no U-turn inside a short slide
-    expect(at(a, 1600).heading).toBeLessThan(90);
+    // no U-turn inside a short slide: 300ms of max input stays well under 90°
+    expect(at(a, 1350).heading).toBeLessThan(90);
+    expect(180 / C.slideTurnRateDeg).toBeGreaterThan(0.7); // a full reversal needs > 0.7s
+  });
+
+  test("A/D responds NOW: heading moves on the very next tick, big curves come fast", () => {
+    const s = slide({ strafe: 1, forward: 0 }); // D only from 1050ms
+    const i = s.findIndex((x) => x.t >= 1050);
+    expect(s[i - 1]!.heading).toBe(0);
+    expect(s[i]!.heading).toBeCloseTo(maxStepDeg, 9); // first input tick already turns at full rate
+    expect(at(s, 1050 + 1000 / 60).heading).toBeGreaterThan(3); // visible within one 60Hz frame
+    const tTo = (deg: number): number => s.find((x) => x.heading >= deg)!.t - 1050;
+    expect(tTo(10)).toBeLessThanOrEqual(60);
+    expect(tTo(30)).toBeLessThanOrEqual(150);
+    expect(tTo(60)).toBeLessThanOrEqual(300);
+    expect(at(s, 1050 + 450).heading).toBeGreaterThanOrEqual(90 - 1e-9); // 60–90° well inside a slide
+    // W+D alone: a clear 45° lateral pull reached quickly; mouse takes it further
+    expect(at(slide({ strafe: 1 }), 1050 + 250).heading).toBeCloseTo(45, 6);
+  });
+
+  test("A → D switch reverses the turn on the next tick, at the rate limit (no snap)", () => {
+    // A until 1300ms, then D
+    const m = new MovementController();
+    m.reset(0, 0.001, 900);
+    const hs: { t: number; h: number }[] = [];
+    for (let i = 0; i * STEP * 1000 <= 1600; i++) {
+      const t = i * STEP * 1000;
+      const strafe = t < 1050 ? 0 : t < 1300 ? -1 : 1;
+      m.update(STEP, t, { forward: 1, strafe, jumpPressed: false, slideHeld: t >= 1000, shiftPressedAtMs: t >= 1000 ? 1000 : -1e4 }, 0, FLOOR, 1);
+      hs.push({ t, h: heading(m) });
+    }
+    const k = hs.findIndex((x) => x.t >= 1300);
+    expect(hs[k - 1]!.h).toBeLessThan(-40);
+    expect(hs[k]!.h - hs[k - 1]!.h).toBeCloseTo(maxStepDeg, 9); // already turning right
+    for (let i = k; i < hs.length; i++) expect(Math.abs(hs[i]!.h - hs[i - 1]!.h)).toBeLessThanOrEqual(maxStepDeg + 1e-9);
+    expect(hs.find((x) => x.t >= 1300 + 250)!.h).toBeGreaterThan(0); // back across center in < 250ms
   });
 
   test("9. RUN → SHIFT boost unchanged (9 → ~15)", () => {
