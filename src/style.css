@@ -75,6 +75,24 @@ canvas { display: block; }
 #reload-tip { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); color: var(--gold); font-size: 13px; letter-spacing: 3px; font-weight: 700; }
 #center-msg { position: absolute; left: 50%; top: 42%; transform: translateX(-50%); font-size: 15px; letter-spacing: 2px; color: var(--dim); text-align: center; }
 #vignette { position: absolute; inset: 0; box-shadow: inset 0 0 180px rgba(0,0,0,0.55); }
+.play-row { display: flex; gap: 10px; }
+#health-box { position: absolute; left: 26px; bottom: 24px; font-size: 15px; letter-spacing: 2px; color: var(--dim); background: var(--panel); border: 1px solid #1c2940; padding: 10px 16px; }
+#health-box b { color: #fff; font-size: 26px; }
+#health-box.low b { color: var(--accent2); }
+#match-box { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); font-size: 14px; letter-spacing: 2px; font-weight: 700; background: var(--panel); border: 1px solid #1c2940; padding: 8px 18px; }
+#killfeed { position: absolute; right: 18px; top: 56px; display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.feed-row { background: var(--panel); border: 1px solid #1c2940; padding: 6px 10px; letter-spacing: 1px; color: var(--text); }
+.feed-row.hs { border-color: var(--gold); color: var(--gold); }
+#scoreboard { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); background: var(--panel); border: 1px solid #2a3a52; padding: 12px 16px; font-size: 13px; min-width: 340px; }
+#scoreboard table, #match-end table { width: 100%; border-collapse: collapse; }
+#scoreboard td, #scoreboard th, #match-end td, #match-end th { padding: 4px 10px; text-align: left; }
+#scoreboard tr.me td, #match-end tr.me td { color: var(--accent); font-weight: 800; }
+.sb-hint { margin-top: 6px; color: var(--dim); font-size: 11px; letter-spacing: 2px; }
+#match-end { position: absolute; inset: 0; z-index: 35; display: flex; align-items: center; justify-content: center; background: rgba(4,7,12,0.82); pointer-events: auto; }
+#match-end .panel { background: var(--panel); border: 1px solid #2a3a52; padding: 26px 32px; min-width: 460px; max-width: 90vw; text-align: center; }
+#match-end .title { font-size: 20px; font-weight: 900; letter-spacing: 2px; }
+#match-end .sub { margin: 10px 0 14px; color: var(--dim); font-size: 13px; }
+#btn-rematch { margin-top: 16px; padding: 14px 44px; font-size: 17px; font-weight: 900; letter-spacing: 3px; background: var(--accent); color: #001318; border: none; cursor: pointer; pointer-events: auto; }
 
 /* ---------- debug ---------- */
 #debug-toggle { position: absolute; right: 14px; top: 12px; z-index: 30; font-size: 11px; background: var(--panel); color: var(--dim); border: 1px solid #1c2940; padding: 5px 10px; cursor: pointer; pointer-events: auto; }

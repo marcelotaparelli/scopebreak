@@ -1,11 +1,15 @@
 import * as THREE from "three";
+import { BOT_NAMES, FFA_SPAWNS, ffaMatchConfig } from "../config/ffaConfig.js";
 import { gameplayConfig } from "../config/gameplayConfig.js";
 import { weaponConfigs, weaponOrder, type WeaponId } from "../config/weaponConfigs.js";
+import { botHitChance, SimpleBot } from "../bots/SimpleBot.js";
+import { Telemetry } from "../debug/Telemetry.js";
 import { CameraController } from "../player/CameraController.js";
 import { MovementController } from "../player/MovementController.js";
 import { classifyState } from "../player/PlayerState.js";
-import { detectSkillEvents, isPrecisionReady } from "../player/movementRules.js";
+import { adsSpreadDeg, detectSkillEvents, isPrecisionReady } from "../player/movementRules.js";
 import { HitDetection } from "../combat/HitDetection.js";
+import { FFAMode } from "../modes/FFAMode.js";
 import { TrainingMode } from "../modes/TrainingMode.js";
 import { WeaponController } from "../weapons/WeaponController.js";
 import { TrainingArena } from "../world/TrainingArena.js";
@@ -14,6 +18,8 @@ import { CombatFeedback } from "../feedback/CombatFeedback.js";
 import { SkillFeedback } from "../feedback/SkillFeedback.js";
 import { DebugPanel } from "../debug/DebugPanel.js";
 import { GameLoop } from "./GameLoop.js";
+
+type AppMode = "menu" | "training" | "ffa";
 
 /**
  * SCOPEBREAK vertical slice: menu → training arena → movement + quickscope loop.
@@ -40,9 +46,22 @@ export class Game {
   private triggerEdge = false;
   private pointerLocked = false;
   private playing = false;
+  private appMode: AppMode = "menu";
   private lastWallKickMs = -10_000;
   private adsWasPrecise = false;
   private lastHudMs = 0;
+  private showScoreboard = false;
+
+  // FFA state (training path untouched when appMode === "training")
+  private ffa = new FFAMode("YOU", BOT_NAMES);
+  private bots: SimpleBot[] = [];
+  private playerHealth = 100;
+  private playerAlive = true;
+  private playerRespawnAtMs = 0;
+  private telemetry = new Telemetry();
+  private nextBotDuelMs = 0;
+  private matchEndShown = false;
+  private occlusionRay = new THREE.Raycaster();
 
   // HUD refs
   private elAmmoMag!: HTMLElement;
@@ -54,6 +73,11 @@ export class Game {
   private elReload!: HTMLElement;
   private elCenter!: HTMLElement;
   private elWeaponBar!: HTMLElement;
+  private elHealth!: HTMLElement;
+  private elMatch!: HTMLElement;
+  private elKillfeed!: HTMLElement;
+  private elScoreboard!: HTMLElement;
+  private elMatchEnd!: HTMLElement;
   private combatFx: CombatFeedback;
   private skillFx: SkillFeedback;
   private gun = new THREE.Group();
@@ -125,6 +149,11 @@ export class Game {
       <div id="center-msg"></div>
       <div id="ammo-box"><div class="wname" id="wname">VIPER</div><div class="mag" id="mag">5</div><div class="reserve" id="reserve">∞</div></div>
       <div id="weapon-bar"></div>
+      <div id="health-box">HP <b id="hp">100</b></div>
+      <div id="match-box"></div>
+      <div id="killfeed"></div>
+      <div id="scoreboard" style="display:none"></div>
+      <div id="match-end" style="display:none"></div>
       <div id="stats-box"></div>`;
     this.container.appendChild(hud);
 
@@ -149,6 +178,11 @@ export class Game {
     this.elReload = hud.querySelector("#reload-tip") as HTMLElement;
     this.elCenter = hud.querySelector("#center-msg") as HTMLElement;
     this.elWeaponBar = hud.querySelector("#weapon-bar") as HTMLElement;
+    this.elHealth = hud.querySelector("#health-box") as HTMLElement;
+    this.elMatch = hud.querySelector("#match-box") as HTMLElement;
+    this.elKillfeed = hud.querySelector("#killfeed") as HTMLElement;
+    this.elScoreboard = hud.querySelector("#scoreboard") as HTMLElement;
+    this.elMatchEnd = hud.querySelector("#match-end") as HTMLElement;
     this.refreshWeaponBar();
   }
 
@@ -169,16 +203,25 @@ export class Game {
       <div class="logo">SCOPE<span>BREAK</span></div>
       <div class="tagline">ONE SHOT. NEVER STOP.</div>
       <div class="motto">Move fast. Aim faster.</div>
-      <button class="menu-btn primary" id="btn-play">PLAY — TRAINING</button>
-      <button class="menu-btn" disabled>FREE FOR ALL — COMING SOON</button>
+      <div class="play-row">
+        <button class="menu-btn primary" id="btn-training">PLAY — TRAINING</button>
+        <button class="menu-btn primary" id="btn-ffa">PLAY — FREE FOR ALL (6, bots)</button>
+      </div>
       <button class="menu-btn" disabled>TEAM DEATHMATCH — COMING SOON</button>
-      <div class="hint"><b>WASD</b> move · <b>MOUSE</b> aim · <b>SPACE</b> jump / wall-kick · <b>SHIFT</b> slide · <b>RMB</b> ADS · <b>LMB</b> fire · <b>R</b> reload · <b>1/2/3</b> snipers · <b>F1</b> tuning<br/>RUN → SLIDE → JUMP → AIR-STRAFE → WALL-KICK → QUICKSCOPE → LAND → SLIDE</div>`;
+      <div class="hint"><b>WASD</b> move · <b>MOUSE</b> aim · <b>SPACE</b> jump / wall-kick · <b>SHIFT</b> slide · <b>RMB</b> ADS · <b>LMB</b> fire · <b>R</b> reload · <b>1/2/3</b> snipers · <b>TAB</b> scoreboard · <b>F1</b> tuning<br/>RUN → SLIDE → JUMP → AIR-STRAFE → WALL-KICK → QUICKSCOPE → LAND → SLIDE</div>`;
     this.container.appendChild(menu);
-    const btn = menu.querySelector("#btn-play") as HTMLElement;
-    btn.onclick = (): void => {
+    const hide = (): void => {
       menu.style.display = "none";
       this.playing = true;
       this.renderer.domElement.requestPointerLock();
+    };
+    (menu.querySelector("#btn-training") as HTMLElement).onclick = (): void => {
+      this.enterTraining();
+      hide();
+    };
+    (menu.querySelector("#btn-ffa") as HTMLElement).onclick = (): void => {
+      this.enterFFA();
+      hide();
     };
   }
 
@@ -190,14 +233,19 @@ export class Game {
     });
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space") e.preventDefault();
+      if (e.code === "Tab") {
+        e.preventDefault();
+        if (this.appMode === "ffa" && this.playing) this.showScoreboard = true;
+        return;
+      }
       if (e.repeat) return;
       this.keys.add(e.code);
       if (e.code === "Space") this.jumpQueued = true;
       if (e.code === "ShiftLeft" || e.code === "ShiftRight") this.shiftPressedAtMs = performance.now();
-      if (e.code === "KeyR" && this.playing) {
+      if (e.code === "KeyR" && this.playing && this.appMode !== "menu") {
         if (this.weapon.startReload(performance.now())) this.combatFx.reload();
       }
-      if (this.playing && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3")) {
+      if (this.playing && this.appMode !== "menu" && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3")) {
         const idx = Number(e.code.slice(-1)) - 1;
         const id: WeaponId | undefined = weaponOrder[idx];
         if (id) {
@@ -207,7 +255,13 @@ export class Game {
         }
       }
     });
-    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    window.addEventListener("keyup", (e) => {
+      if (e.code === "Tab") {
+        this.showScoreboard = false;
+        return;
+      }
+      this.keys.delete(e.code);
+    });
     window.addEventListener("blur", () => this.keys.clear());
 
     document.addEventListener("pointerlockchange", () => {
@@ -258,8 +312,9 @@ export class Game {
     const frameStart = performance.now();
     this.weapon.update(nowMs);
 
-    const { forward, strafe } = this.moveInput();
-    const jumpPressed = this.jumpQueued;
+    const canMove = this.playerAliveOrTraining();
+    const { forward, strafe } = canMove ? this.moveInput() : { forward: 0, strafe: 0 };
+    const jumpPressed = canMove && this.jumpQueued;
     this.jumpQueued = false;
     const slideHeld = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
     const adsSlow = this.weapon.adsActive ? this.weapon.config.moveSpeedMultiplier : 1;
@@ -270,6 +325,7 @@ export class Game {
       this.cam.yaw, this.arena.colliders, adsSlow,
     );
     if (this.move.events.justWallKicked) this.lastWallKickMs = nowMs;
+    this.telemetry.observeSpeed(this.move.horizontalSpeed());
 
     // camera pose
     const b = this.move.body;
@@ -298,22 +354,29 @@ export class Game {
       this.combatFx.precisionReady();
     }
 
-    // targets
-    for (const t of this.targets) t.update(nowMs, nowMs / 1000);
+    // targets (training only; hidden in FFA where bots are the targets)
+    if (this.appMode === "ffa") {
+      for (const t of this.targets) t.group.visible = false;
+    } else {
+      for (const t of this.targets) t.update(nowMs, nowMs / 1000);
+    }
 
     // shooting
     const wantFire = this.weapon.config.boltAction ? this.triggerEdge : this.triggerHeld;
-    if (this.playing && wantFire) {
+    if (this.playing && wantFire && this.playerAliveOrTraining()) {
       this.triggerEdge = false;
-      if (this.weapon.canFireNow(nowMs)) this.fire(nowMs, precise);
-      else if (this.weapon.ammoInMag <= 0 && !this.weapon.reloading) {
+      if (this.weapon.canFireNow(nowMs)) {
+        if (this.appMode === "ffa") this.fireFFA(nowMs, precise);
+        else this.fire(nowMs, precise);
+      } else if (this.weapon.ammoInMag <= 0 && !this.weapon.reloading) {
         this.combatFx.dryFire();
         this.weapon.startReload(nowMs);
         this.triggerEdge = false;
       }
     }
 
-    this.mode.update(dt);
+    if (this.appMode === "ffa") this.updateFFA(dt, nowMs);
+    else this.mode.update(dt);
     this.combatFx.update(nowMs);
 
     // DOM @ ~15Hz (never per-substep full refresh)
@@ -326,14 +389,19 @@ export class Game {
 
   private fire(nowMs: number, precise: boolean): void {
     this.mode.registerShot();
+    this.telemetry.registerShot(this.weapon.currentId);
     this.weapon.consumeShot(nowMs);
 
     const ads = this.weapon.adsActive;
+    const hip = Math.max(gameplayConfig.hipfireSpreadDeg, this.weapon.config.hipSpreadDeg);
     const spread = ads
-      ? precise
-        ? gameplayConfig.adsSpreadDeg
-        : this.weapon.config.hipSpreadDeg * 0.45
-      : Math.max(gameplayConfig.hipfireSpreadDeg, this.weapon.config.hipSpreadDeg);
+      ? adsSpreadDeg({
+        adsElapsedMs: this.weapon.adsElapsedMs(nowMs),
+        adsMs: Math.max(gameplayConfig.precisionWindowMs, this.weapon.config.adsMs),
+        hipSpreadDeg: hip,
+        preciseSpreadDeg: gameplayConfig.adsSpreadDeg,
+      })
+      : hip;
 
     const origin = this.camera.position.clone();
     const dir = HitDetection.applySpread(this.cam.forwardDir(), spread);
@@ -341,7 +409,7 @@ export class Game {
 
     this.cam.kickRecoil(this.weapon.config.recoilKick);
     this.gunKick = 1;
-    this.combatFx.shot();
+    this.combatFx.shotFor(this.weapon.currentId);
     this.combatFx.muzzle(origin.clone().addScaledVector(dir, 0.8));
     this.combatFx.tracer(origin.clone().addScaledVector(dir, 0.9), res.point);
 
@@ -359,6 +427,7 @@ export class Game {
         killed,
       });
       this.mode.registerHit({ headshot: res.headshot, skills, distance: res.distance });
+      this.telemetry.registerHit(this.weapon.currentId, res.headshot);
       if (res.headshot) this.combatFx.headHit();
       else this.combatFx.bodyHit();
       this.skillFx.show(skills, res.headshot);
@@ -367,6 +436,284 @@ export class Game {
       this.mode.registerMiss();
       if (res.blocked) this.combatFx.impact(res.point);
     }
+  }
+
+  // ---------------- FFA ----------------
+
+  private playerAliveOrTraining(): boolean {
+    if (this.appMode !== "ffa") return true;
+    return this.playerAlive;
+  }
+
+  private enterTraining(): void {
+    this.appMode = "training";
+    for (const t of this.targets) t.group.visible = true;
+    for (const b of this.bots) this.scene.remove(b.group);
+    this.bots = [];
+    this.elMatchEnd.style.display = "none";
+  }
+
+  private enterFFA(): void {
+    this.appMode = "ffa";
+    for (const b of this.bots) this.scene.remove(b.group);
+    this.bots = [];
+    this.resetFFA(performance.now());
+  }
+
+  private resetFFA(nowMs: number): void {
+    this.ffa = new FFAMode("YOU", BOT_NAMES);
+    this.ffa.start(nowMs);
+    this.telemetry = new Telemetry();
+    this.matchEndShown = false;
+    this.elMatchEnd.style.display = "none";
+    this.elKillfeed.innerHTML = "";
+    this.playerHealth = 100;
+    this.playerAlive = true;
+    this.weapon.switchTo("viper", nowMs);
+    this.weapon.ammoInMag = this.weapon.config.magazineSize;
+    this.refreshWeaponBar();
+    const s0 = FFA_SPAWNS[0]!;
+    this.move.reset(s0.x, s0.y, s0.z);
+    this.cam.yaw = 0;
+    this.cam.pitch = 0;
+    BOT_NAMES.forEach((name, i) => {
+      const spawn = FFA_SPAWNS[(i + 1) % FFA_SPAWNS.length]!;
+      const bot = new SimpleBot(i + 1, name, spawn);
+      this.bots.push(bot);
+      this.scene.add(bot.group);
+    });
+    this.nextBotDuelMs = nowMs + 1500;
+  }
+
+  private safestSpawn(): { x: number; y: number; z: number } {
+    let best = FFA_SPAWNS[0]!;
+    let bestDist = -1;
+    for (const s of FFA_SPAWNS) {
+      let minD = Infinity;
+      for (const b of this.bots) {
+        if (!b.alive) continue;
+        const d = Math.hypot(b.pos.x - s.x, b.pos.z - s.z);
+        if (d < minD) minD = d;
+      }
+      if (minD > bestDist) {
+        bestDist = minD;
+        best = s;
+      }
+    }
+    return best;
+  }
+
+  private fireFFA(nowMs: number, _precise: boolean): void {
+    this.ffa.registerShot(0);
+    this.telemetry.registerShot(this.weapon.currentId);
+    this.weapon.consumeShot(nowMs);
+
+    const ads = this.weapon.adsActive;
+    const hip = Math.max(gameplayConfig.hipfireSpreadDeg, this.weapon.config.hipSpreadDeg);
+    const spread = ads
+      ? adsSpreadDeg({
+        adsElapsedMs: this.weapon.adsElapsedMs(nowMs),
+        adsMs: Math.max(gameplayConfig.precisionWindowMs, this.weapon.config.adsMs),
+        hipSpreadDeg: hip,
+        preciseSpreadDeg: gameplayConfig.adsSpreadDeg,
+      })
+      : hip;
+
+    const origin = this.camera.position.clone();
+    const dir = HitDetection.applySpread(this.cam.forwardDir(), spread);
+    const aliveBots = this.bots.filter((b) => b.alive);
+    const res = this.hits.resolve(origin, dir, 220, aliveBots, this.arena.solidMeshes);
+
+    this.cam.kickRecoil(this.weapon.config.recoilKick);
+    this.gunKick = 1;
+    this.combatFx.shotFor(this.weapon.currentId);
+    this.combatFx.muzzle(origin.clone().addScaledVector(dir, 0.8));
+    this.combatFx.tracer(origin.clone().addScaledVector(dir, 0.9), res.point);
+
+    if (res.target) {
+      const bot = res.target as unknown as SimpleBot;
+      const cfg = this.weapon.config;
+      const headshot = res.headshot;
+      const killed = bot.applyDamage(headshot ? cfg.headDamage : cfg.bodyDamage);
+      const wallKickRecent = nowMs - this.lastWallKickMs < 2500;
+      const skills = detectSkillEvents({
+        headshot,
+        sliding: this.move.sliding,
+        airborne: !this.move.body.grounded,
+        wallKickRecent,
+        distance: res.distance,
+        longShotDistance: gameplayConfig.longShotDistance,
+        killed,
+      });
+      this.ffa.registerHit(0, nowMs, bot.botIndex);
+      this.telemetry.registerHit(this.weapon.currentId, headshot);
+      if (killed) {
+        const ev = this.ffa.registerKill({
+          killerIdx: 0, victimIdx: bot.botIndex, headshot, skills,
+          weapon: cfg.displayName, nowMs,
+        });
+        this.telemetry.registerKill(this.weapon.currentId);
+        this.combatFx.killConfirm(headshot);
+        this.pushKillfeed(ev);
+        bot.die(nowMs);
+      } else if (headshot) this.combatFx.headHit();
+      else this.combatFx.bodyHit();
+      this.skillFx.show(skills, headshot);
+      this.combatFx.impact(res.point, headshot ? 0xffd60a : 0x00f0ff);
+    } else {
+      this.ffa.registerMiss(0);
+      if (res.blocked) this.combatFx.impact(res.point);
+    }
+  }
+
+  private updateFFA(dt: number, nowMs: number): void {
+    this.ffa.update(dt, nowMs);
+    const playerPos = this.camera.position.clone();
+
+    // bots act
+    for (const bot of this.bots) {
+      // respawn due
+      if (!bot.alive && this.ffa.respawnDue(bot.botIndex, nowMs) && this.ffa.state === "playing") {
+        const s = FFA_SPAWNS[bot.botIndex % FFA_SPAWNS.length]!;
+        bot.respawn({ x: s.x + (Math.random() * 2 - 1), y: s.y, z: s.z + (Math.random() * 2 - 1) }, nowMs);
+        this.ffa.consumeRespawn(bot.botIndex);
+      }
+      if (!bot.alive) continue;
+      const intent = bot.update(dt, nowMs, playerPos, this.playerAlive && this.ffa.state === "playing");
+      if (intent && this.playerAlive && this.ffa.state === "playing") this.resolveBotShot(bot, intent.origin, intent.dir);
+    }
+
+    // abstract bot-vs-bot duels keep the scoreboard alive without full AI
+    if (this.ffa.state === "playing" && nowMs >= this.nextBotDuelMs) {
+      this.nextBotDuelMs = nowMs + 1100;
+      this.duelBots(nowMs);
+    }
+
+    // player respawn
+    if (!this.playerAlive && this.ffa.state === "playing" && nowMs >= this.playerRespawnAtMs) {
+      const s = this.safestSpawn();
+      this.move.reset(s.x, s.y, s.z);
+      this.playerHealth = 100;
+      this.playerAlive = true;
+      this.weapon.ammoInMag = this.weapon.config.magazineSize;
+      this.telemetry.resetLife();
+    }
+
+    if (this.ffa.state === "ended" && !this.matchEndShown) {
+      this.matchEndShown = true;
+      this.showMatchEnd();
+    }
+  }
+
+  private resolveBotShot(bot: SimpleBot, origin: THREE.Vector3, dir: THREE.Vector3): void {
+    const eye = this.camera.position.clone();
+    const toEye = new THREE.Vector3().subVectors(eye, origin);
+    const dist = toEye.length();
+    if (dist < 0.5 || dist > 60) return;
+    const ndir = toEye.normalize();
+    // occlusion: wall closer than player blocks
+    this.occlusionRay.set(origin, ndir);
+    this.occlusionRay.far = dist;
+    const blocked = this.occlusionRay.intersectObjects(this.arena.solidMeshes, false);
+    const muzzleEnd = origin.clone().addScaledVector(ndir, Math.min(dist, 3));
+    if (blocked.length > 0) {
+      this.combatFx.tracer(muzzleEnd, blocked[0]!.point.clone());
+      return;
+    }
+    this.combatFx.tracer(muzzleEnd, eye);
+    const chance = botHitChance(dist, this.move.horizontalSpeed(), 1);
+    if (Math.random() < chance) {
+      const headshot = Math.random() < 0.18;
+      this.damagePlayer(headshot ? 55 : 30, headshot, bot.botIndex, performance.now());
+    }
+  }
+
+  private duelBots(nowMs: number): void {
+    const alive = this.bots.filter((b) => b.alive);
+    if (alive.length < 2) return;
+    if (Math.random() > 0.5) return;
+    const killer = alive[Math.floor(Math.random() * alive.length)]!;
+    let victim = alive[Math.floor(Math.random() * alive.length)]!;
+    if (victim === killer) victim = alive[(alive.indexOf(killer) + 1) % alive.length]!;
+    const dmg = 40 + Math.random() * 55;
+    const headshot = Math.random() < 0.25;
+    const killed = victim.applyDamage(headshot ? dmg * 1.6 : dmg);
+    if (killed) {
+      const weapons = ["VIPER", "TITAN", "PHANTOM"];
+      const ev = this.ffa.registerKill({
+        killerIdx: killer.botIndex,
+        victimIdx: victim.botIndex,
+        headshot,
+        skills: headshot ? ["headshot"] : [],
+        weapon: weapons[Math.floor(Math.random() * weapons.length)]!,
+        nowMs,
+      });
+      this.pushKillfeed(ev);
+      victim.die(nowMs);
+    }
+  }
+
+  private damagePlayer(dmg: number, headshot: boolean, killerIdx: number, nowMs: number): void {
+    if (!this.playerAlive || this.ffa.state !== "playing") return;
+    this.playerHealth -= dmg;
+    this.combatFx.impact(this.camera.position.clone(), 0xff2d55);
+    if (this.playerHealth <= 0) {
+      this.playerHealth = 0;
+      this.playerAlive = false;
+      this.playerRespawnAtMs = nowMs + this.ffa.respawnMs;
+      const ev = this.ffa.registerKill({
+        killerIdx, victimIdx: 0, headshot, skills: headshot ? ["headshot"] : [],
+        weapon: "VIPER", nowMs,
+      });
+      this.telemetry.registerDeath();
+      this.combatFx.playerDown();
+      this.pushKillfeed(ev);
+    }
+    void headshot;
+  }
+
+  private pushKillfeed(ev: { killer: string; victim: string; weapon: string; headshot: boolean; skills: string[] }): void {
+    const div = document.createElement("div");
+    div.className = "feed-row" + (ev.headshot ? " hs" : "");
+    const skill = ev.skills.length > 0 && !ev.headshot ? "" : ev.skills.length > 1 ? ` · ${String(ev.skills[1]).toUpperCase()}` : "";
+    div.textContent = `${ev.killer} [${ev.weapon}${ev.headshot ? "/headshot" : ""}] ${ev.victim}${skill}`;
+    this.elKillfeed.prepend(div);
+    while (this.elKillfeed.children.length > 5) this.elKillfeed.lastChild?.remove();
+    window.setTimeout(() => div.remove(), 6000);
+  }
+
+  private renderScoreboard(): void {
+    const order = this.ffa.placement();
+    const rows = order.map((idx, i) => {
+      const s = this.ffa.scores[idx]!;
+      return `<tr class="${idx === 0 ? "me" : ""}"><td>${i + 1}</td><td>${s.name}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.headshots}</td><td>${s.skillScore}</td></tr>`;
+    }).join("");
+    this.elScoreboard.innerHTML =
+      `<table><tr><th>#</th><th>player</th><th>K</th><th>D</th><th>HS</th><th>score</th></tr>${rows}</table>` +
+      `<div class="sb-hint">TAB — hold to view</div>`;
+  }
+
+  private showMatchEnd(): void {
+    document.exitPointerLock?.();
+    const order = this.ffa.placement();
+    const me = this.ffa.scores[0]!;
+    const rank = order.indexOf(0) + 1;
+    const rows = order.map((idx, i) => {
+      const s = this.ffa.scores[idx]!;
+      return `<tr class="${idx === 0 ? "me" : ""}"><td>${i + 1}</td><td>${s.name}</td><td>${s.kills}</td><td>${s.deaths}</td><td>${s.headshots}</td><td>${s.skillScore}</td></tr>`;
+    }).join("");
+    this.elMatchEnd.innerHTML = `
+      <div class="panel">
+        <div class="title">MATCH END — ${this.ffa.endReason}</div>
+        <div class="sub">YOU placed #${rank} · K/D ${me.kills}/${me.deaths} (${this.ffa.kd(0).toFixed(2)}) · ACC ${(this.ffa.accuracy(0) * 100).toFixed(1)}% · HS ${me.headshots} · BEST ${me.bestSkill ?? "—"} · AVG ENGAGE ${this.ffa.avgEngagementSec().toFixed(1)}s</div>
+        <table><tr><th>#</th><th>player</th><th>K</th><th>D</th><th>HS</th><th>score</th></tr>${rows}</table>
+        <button id="btn-rematch">REMATCH</button>
+      </div>`;
+    this.elMatchEnd.style.display = "flex";
+    (this.elMatchEnd.querySelector("#btn-rematch") as HTMLElement).onclick = (): void => {
+      this.resetFFA(performance.now());
+      this.renderer.domElement.requestPointerLock();
+    };
   }
 
   private refreshHud(nowMs: number, precise: boolean, precisionMs: number): void {
@@ -392,9 +739,22 @@ export class Game {
     });
     const s = this.mode.stats;
     const acc = s.shots > 0 ? ((s.hits / s.shots) * 100).toFixed(1) : "—";
-    this.elStats.innerHTML =
-      `SHOTS <b>${s.shots}</b> · HITS <b>${s.hits}</b> · ACC <b>${acc}%</b><br/>` +
-      `HEADSHOTS <b>${s.headshots}</b> · SCORE <b>${s.skillScore}</b>`;
+    if (this.appMode === "ffa") {
+      const me = this.ffa.scores[0]!;
+      const t = this.telemetry;
+      const pw = (id: "viper" | "titan" | "phantom"): string => {
+        const p = t.perWeapon[id];
+        return `${id.toUpperCase()} <b>${p.shots}/${p.hits}/${p.kills}/${p.headshots}</b>`;
+      };
+      this.elStats.innerHTML =
+        `K <b>${me.kills}</b> · D <b>${me.deaths}</b> · HS <b>${me.headshots}</b> · SCORE <b>${me.skillScore}</b><br/>` +
+        `ACC <b>${(this.ffa.accuracy(0) * 100).toFixed(1)}%</b> · MAXSPD <b>${t.maxSpeedThisLife.toFixed(1)}</b> · AVG ENG <b>${this.ffa.avgEngagementSec().toFixed(1)}s</b><br/>` +
+        `${pw("viper")}<br/>${pw("titan")}<br/>${pw("phantom")}`;
+    } else {
+      this.elStats.innerHTML =
+        `SHOTS <b>${s.shots}</b> · HITS <b>${s.hits}</b> · ACC <b>${acc}%</b><br/>` +
+        `HEADSHOTS <b>${s.headshots}</b> · SCORE <b>${s.skillScore}</b>`;
+    }
 
     const adsMs = this.playing ? w.adsElapsedMs(nowMs) : 0;
     this.debug.updateStats(
@@ -404,12 +764,34 @@ export class Game {
       `<div class="stat"><span>ADS</span><b>${w.adsActive} (${adsMs.toFixed(0)}/${precisionMs}ms)</b></div>` +
       `<div class="stat"><span>precision</span><b>${precise}</b></div>` +
       `<div class="stat"><span>speed</span><b>${this.move.horizontalSpeed().toFixed(2)} m/s</b></div>` +
+      `<div class="stat"><span>maxSpeed(life)</span><b>${this.telemetry.maxSpeedThisLife.toFixed(2)}</b></div>` +
       `<div class="stat"><span>vy</span><b>${this.move.body.vy.toFixed(2)}</b></div>` +
+      `<div class="stat"><span>mode</span><b>${this.appMode}${this.appMode === "ffa" ? ` K${this.ffa.scores[0]!.kills} D${this.ffa.scores[0]!.deaths}` : ""}</b></div>` +
       `<div class="stat"><span>weapon</span><b>${w.currentId} ${w.ammoInMag}/${w.config.magazineSize}</b></div>`,
     );
 
     this.elCenter.textContent =
       !this.playing ? "" : !this.pointerLocked ? "CLICK TO RE-ENGAGE POINTER LOCK" : "";
+
+    // FFA HUD (training keeps the original minimal stats box)
+    const inFfa = this.appMode === "ffa";
+    this.elHealth.style.display = inFfa ? "block" : "none";
+    this.elMatch.style.display = inFfa ? "block" : "none";
+    if (inFfa) {
+      (this.elHealth.querySelector("#hp") as HTMLElement).textContent = this.playerAlive
+        ? String(Math.ceil(this.playerHealth))
+        : `RESPAWN…`;
+      this.elHealth.classList.toggle("low", this.playerAlive && this.playerHealth <= 35);
+      const t = Math.ceil(this.ffa.timeLeftSec(nowMs));
+      const mm = Math.floor(t / 60);
+      const ss = String(t % 60).padStart(2, "0");
+      this.elMatch.textContent = `FFA · YOU ${this.ffa.scores[0]!.kills}/${ffaMatchConfig.killLimit} · ${mm}:${ss}`;
+      this.elScoreboard.style.display = this.showScoreboard ? "block" : "none";
+      if (this.showScoreboard) this.renderScoreboard();
+    } else {
+      this.elScoreboard.style.display = "none";
+    }
+
     void nowMs;
   }
 }

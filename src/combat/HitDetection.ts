@@ -1,8 +1,13 @@
 import * as THREE from "three";
-import type { TrainingTarget } from "../world/TrainingTarget.js";
+
+export interface Hittable {
+  alive: boolean;
+  meshes: THREE.Object3D[];
+  applyDamage(dmg: number, nowMs: number): boolean;
+}
 
 export interface HitscanResult {
-  target: TrainingTarget | null;
+  target: Hittable | null;
   headshot: boolean;
   distance: number;
   point: THREE.Vector3;
@@ -20,13 +25,13 @@ export class HitDetection {
     origin: THREE.Vector3,
     dir: THREE.Vector3,
     maxRange: number,
-    targets: TrainingTarget[],
+    targets: Hittable[],
     walls: THREE.Object3D[],
   ): HitscanResult {
     this.raycaster.set(origin, dir);
     this.raycaster.far = maxRange;
 
-    let bestTarget: TrainingTarget | null = null;
+    let bestTarget: Hittable | null = null;
     let bestHead = false;
     let bestDist = Infinity;
     const bestPoint = new THREE.Vector3();

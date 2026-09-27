@@ -46,6 +46,18 @@ export class CombatFeedback {
     this.blip(160, 120, 0.22, "sawtooth");
   }
 
+  /** Per-weapon shot signature (procedural, no assets). Keeps Viper feel, Titan heavy, Phantom light. */
+  shotFor(weaponId: string): void {
+    if (weaponId === "titan") {
+      this.blip(95, 220, 0.3, "sawtooth");
+      window.setTimeout(() => this.blip(60, 180, 0.2, "square"), 30);
+    } else if (weaponId === "phantom") {
+      this.blip(220, 80, 0.16, "sawtooth");
+    } else {
+      this.shot();
+    }
+  }
+
   dryFire(): void {
     this.blip(900, 60, 0.08);
   }
@@ -63,6 +75,24 @@ export class CombatFeedback {
     this.showMarker(true);
     this.blip(990, 140, 0.28);
     window.setTimeout(() => this.blip(1320, 160, 0.22), 70);
+  }
+
+  /** Kill confirmation: distinct two-tone chime + gold marker pulse. */
+  killConfirm(headshot: boolean): void {
+    this.showMarker(headshot);
+    if (headshot) {
+      this.blip(1180, 110, 0.26);
+      window.setTimeout(() => this.blip(1560, 200, 0.26), 80);
+    } else {
+      this.blip(740, 110, 0.24);
+      window.setTimeout(() => this.blip(1108, 160, 0.22), 80);
+    }
+  }
+
+  /** Short death sting for local player death (does not block respawn flow). */
+  playerDown(): void {
+    this.blip(320, 220, 0.22, "sawtooth");
+    window.setTimeout(() => this.blip(190, 300, 0.2, "sawtooth"), 120);
   }
 
   precisionReady(): void {

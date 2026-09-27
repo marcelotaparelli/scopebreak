@@ -96,6 +96,35 @@ export function isPrecisionReady(adsElapsedMs: number, windowMs: number): boolea
   return adsElapsedMs >= windowMs;
 }
 
+/**
+ * Progressive ADS spread curve (baseline-preserving).
+ * Thresholds unchanged: precision-ready still at adsMs.
+ * - t=0 → hipSpread (hip fire)
+ * - t≈0.4 → hipSpread*0.45 (old mid-transition value, reached fast)
+ * - t=1 → preciseSpread (full precision BEFORE visual scope completes)
+ * Crosshair alignment untouched: ADS never shifts yaw/pitch.
+ */
+export function adsSpreadDeg(args: {
+  adsElapsedMs: number;
+  adsMs: number;
+  hipSpreadDeg: number;
+  preciseSpreadDeg: number;
+}): number {
+  const { adsMs, hipSpreadDeg, preciseSpreadDeg } = args;
+  if (adsMs <= 0) return preciseSpreadDeg;
+  const t = Math.max(0, Math.min(1, args.adsElapsedMs / adsMs));
+  if (t >= 1) return preciseSpreadDeg;
+  const mid = hipSpreadDeg * 0.45;
+  if (t <= 0.4) {
+    const k = t / 0.4;
+    const eased = 1 - (1 - k) * (1 - k); // fast initial collapse, same endpoints
+    return hipSpreadDeg + (mid - hipSpreadDeg) * eased;
+  }
+  const k = (t - 0.4) / 0.6;
+  const eased = k * k; // accelerating reward for learning the timing
+  return mid + (preciseSpreadDeg - mid) * eased;
+}
+
 export function canFire(nowMs: number, lastShotMs: number, cooldownMs: number): boolean {
   return nowMs - lastShotMs >= cooldownMs;
 }
