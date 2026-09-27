@@ -31,17 +31,12 @@ export function slideBoostSpeed(current: number, multiplier: number, minBoostSpe
 
 /**
  * Flow-landing entry (air → ground + fresh Shift): PRESERVE momentum with
- * a small landing cost, never boost. Only landings BELOW the floor use the
- * normal entry rule (bounded lift to the floor constant — no compounding).
+ * a small landing cost, never boost — landing is never an energy source,
+ * whatever the speed. (Lifting slow landings to the boost floor made the
+ * touchdown feel like the moment speed appeared.)
  */
-export function flowSlideSpeed(
-  current: number,
-  retention: number,
-  multiplier: number,
-  minBoostSpeed: number,
-): number {
-  if (current >= minBoostSpeed) return current * retention;
-  return slideBoostSpeed(current, multiplier, minBoostSpeed);
+export function flowSlideSpeed(current: number, retention: number): number {
+  return current * retention;
 }
 
 /** Slide-jump takeoff: keep ~all horizontal momentum, own (lower) vertical. */
@@ -79,6 +74,12 @@ export function slideJumpVelocity(
 /**
  * Gradual air control: steer current horizontal velocity toward wish dir
  * without allowing instant 180s. Returns new horizontal speed vector (x,z).
+ *
+ * ENERGY RULE: air input may build speed only up to `wishSpeed` (run speed).
+ * Above that it is pure steering — magnitude never grows beyond what the
+ * player carried into the air (slide/jump momentum), and excess above
+ * `maxAirSpeed` decays gently. Holding W mid-air is NOT an accelerator
+ * (it used to add ~27 m/s² up to maxAirSpeed, so every jump landed at 18).
  */
 export function airControlStep(
   vx: number,
@@ -88,6 +89,7 @@ export function airControlStep(
   airAcceleration: number,
   airControl: number,
   maxAirSpeed: number,
+  wishSpeed: number,
   dt: number,
 ): { vx: number; vz: number } {
   const wishLen = Math.hypot(wishX, wishZ);
@@ -98,9 +100,10 @@ export function airControlStep(
   const add = airAcceleration * airControl * dt;
   let nvx = vx + nx * add;
   let nvz = vz + nz * add;
-  // Firm speed ceiling: keep prior excess momentum but decay it toward the
-  // cap instead of letting strafe pumping grow speed without bound.
-  const allowed = Math.max(maxAirSpeed, oldSpeed - oldSpeed * 0.35 * dt);
+  // carried momentum is kept (decaying only above the air ceiling);
+  // input alone can never push past wishSpeed
+  const carried = Math.min(oldSpeed, Math.max(maxAirSpeed, oldSpeed - oldSpeed * 0.35 * dt));
+  const allowed = Math.max(wishSpeed, carried);
   const sp = Math.hypot(nvx, nvz);
   if (sp > allowed) {
     const s = allowed / sp;

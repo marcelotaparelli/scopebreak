@@ -47,6 +47,16 @@ export class MovementController {
   /** Last entry authority (debug): pre-entry speed → applied slide speed. */
   lastSlideEntrySpeed = 0;
   lastSlideBoostedSpeed = 0;
+  /** Last touchdown (debug): horizontal speed right before → right after landing. */
+  lastLandSpeedIn = 0;
+  lastLandSpeedOut = 0;
+  /**
+   * One Shift press = at most one slide entry. Armed on the keydown edge,
+   * consumed by the entry it produces; holding Shift never re-arms it.
+   */
+  private slideArmed = false;
+  private slideArmedInAir = false;
+  private lastShiftPressMs = -10_000;
   private slideDirX = 0;
   private slideDirZ = 0;
 
@@ -57,6 +67,8 @@ export class MovementController {
     this.slideCooldownUntilMs = 0;
     this.lastLandMs = -10_000;
     this.wasGrounded = true;
+    this.slideArmed = false;
+    this.slideArmedInAir = false;
   }
 
   horizontalSpeed(): number {
@@ -74,6 +86,14 @@ export class MovementController {
 
     const hSpeed = this.horizontalSpeed();
 
+    // --- Shift edge → arm exactly one slide entry ---
+    if (input.shiftPressedAtMs !== this.lastShiftPressMs) {
+      this.lastShiftPressMs = input.shiftPressedAtMs;
+      this.slideArmed = true;
+      this.slideArmedInAir = !b.grounded;
+    }
+    if (!input.slideHeld) this.slideArmed = false;
+
     // --- wish direction (camera-relative) ---
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
@@ -87,23 +107,6 @@ export class MovementController {
     const topSpeed = cfg.runSpeed * adsSlow;
 
     if (b.grounded) {
-      // landing detection (was air, now ground contact kept from previous integrate)
-      if (!this.wasGrounded) {
-        this.wallKickedThisAirtime = false;
-        this.lastLandMs = nowMs;
-        // FLOW LANDING: only on a FRESH Shift press (buffered ≤ window before
-        // touchdown). Merely holding Shift from an old press must NOT re-enter
-        // — otherwise every landing manufactures free speed.
-        const sinceShift = nowMs - input.shiftPressedAtMs;
-        if (
-          sinceShift <= cfg.flowLandingWindowMs &&
-          this.horizontalSpeed() >= cfg.minimumSlideSpeed * 0.6
-        ) {
-          this.startFlowSlide(nowMs);
-          this.events.justFlowLanded = true;
-        }
-      }
-
       if (this.sliding) {
         // --- SLIDE: boosted entry, gentle decay, limited steering ---
         const sp = this.horizontalSpeed();
@@ -130,14 +133,19 @@ export class MovementController {
       } else {
         b.height = cfg.standingHeight;
         // --- slide entry FIRST: boost reads pre-frame momentum, before
-        // accel/friction touch it (Shift must amplify current speed) ---
+        // accel/friction touch it (Shift must amplify current speed).
+        // Needs a fresh, unconsumed press: a held Shift never re-enters. ---
         const enteredSlide =
-          input.slideHeld &&
+          this.slideArmed &&
           canStartSlide({
             grounded: true, alreadySliding: false, horizontalSpeed: hSpeed,
             minimumSlideSpeed: cfg.minimumSlideSpeed, cooldownRemainingMs: this.slideCooldownUntilMs - nowMs,
           });
-        if (enteredSlide) this.startSlide(nowMs);
+        if (enteredSlide) {
+          // a press right after touchdown is a late flow landing: preserve, never boost
+          if (nowMs - this.lastLandMs <= cfg.flowLandingWindowMs) this.startFlowSlide(nowMs);
+          else this.startSlide(nowMs);
+        }
         // Shift+Space on the same frame: entry converts straight into takeoff
         if (input.jumpPressed && enteredSlide) {
           this.doSlideJump(nowMs);
@@ -167,8 +175,17 @@ export class MovementController {
               b.vz *= (sp0 - drop) / sp0;
             }
           }
-          // safety ceiling only: legit tech speed (slide chains) is preserved,
-          // only impossible excess bleeds off — never clamp back to runSpeed.
+          // overspeed while RUNNING (after slide exit / landing) bleeds off
+          // smoothly toward run speed — never a snap, never a permanent
+          // ratchet (otherwise run baseline creeps up and Shift stops reading
+          // as FASTER). Slides/air keep their own momentum rules.
+          const runSp = this.horizontalSpeed();
+          if (hasInput && runSp > topSpeed) {
+            const k = (topSpeed + (runSp - topSpeed) * Math.exp(-cfg.groundOverspeedDecay * dt)) / runSp;
+            b.vx *= k;
+            b.vz *= k;
+          }
+          // safety ceiling for impossible excess
           const gsp = this.horizontalSpeed();
           if (gsp > cfg.maxMovementSpeed) {
             const over = gsp - cfg.maxMovementSpeed;
@@ -191,7 +208,7 @@ export class MovementController {
       b.height = cfg.standingHeight;
       if (this.sliding) this.endSlide(colliders);
       if (hasInput) {
-        const r = airControlStep(b.vx, b.vz, wishX, wishZ, cfg.airAcceleration, cfg.airControl, cfg.maxAirSpeed, dt);
+        const r = airControlStep(b.vx, b.vz, wishX, wishZ, cfg.airAcceleration, cfg.airControl, cfg.maxAirSpeed, topSpeed, dt);
         b.vx = r.vx;
         b.vz = r.vz;
       }
@@ -218,26 +235,32 @@ export class MovementController {
     if (b.vy < -30) b.vy = -30;
 
     // integrate + collide
-    this.wasGrounded = b.grounded;
+    const groundedBefore = b.grounded;
+    const speedBefore = this.horizontalSpeed();
     moveAndCollide(b, dt, colliders);
-    if (b.grounded && !this.wasGrounded) {
-      // touchdown happened inside integrate; record + maybe flow-slide next frame via buffer
+    this.wasGrounded = b.grounded;
+    if (b.grounded && !groundedBefore) {
+      // TOUCHDOWN — single landing authority. Energy neutral: nothing here
+      // adds horizontal speed.
       this.lastLandMs = nowMs;
       this.wallKickedThisAirtime = false;
-      // post-landing buffered slide (Shift pressed slightly after landing):
-      // same preserve rule as the pre-integrate path — landing never boosts.
+      this.lastLandSpeedIn = speedBefore;
+      // FLOW LANDING: only a FRESH Shift press (buffered ≤ window before
+      // touchdown) enters, and it preserves momentum. Holding Shift from an
+      // old press does nothing.
       const sinceShift = nowMs - input.shiftPressedAtMs;
       if (
-        input.slideHeld && sinceShift <= cfg.flowLandingWindowMs &&
-        this.horizontalSpeed() >= cfg.minimumSlideSpeed * 0.6 &&
+        this.slideArmed && sinceShift <= cfg.flowLandingWindowMs &&
+        this.horizontalSpeed() >= cfg.minimumSlideSpeed &&
         nowMs >= this.slideCooldownUntilMs
       ) {
         this.startFlowSlide(nowMs);
         this.events.justFlowLanded = true;
+      } else if (this.slideArmedInAir) {
+        // stale mid-air press must not turn into a ground boost after landing
+        this.slideArmed = false;
       }
-    }
-    if (!b.grounded && this.wasGrounded && b.vy > 0.1) {
-      // left ground via jump — nothing extra
+      this.lastLandSpeedOut = this.horizontalSpeed();
     }
   }
 
@@ -277,6 +300,7 @@ export class MovementController {
       b.vz = this.slideDirZ * speed;
     }
     this.sliding = true;
+    this.slideArmed = false; // press consumed
     this.events.justStartedSlide = true;
     b.height = this.cfg.slideHeight;
     this.slideCooldownUntilMs = nowMs + this.cfg.slideCooldownMs * 0.4;
@@ -296,7 +320,7 @@ export class MovementController {
   private startFlowSlide(nowMs: number): void {
     const sp = this.horizontalSpeed();
     this.enterSlideWithSpeed(
-      flowSlideSpeed(sp, this.cfg.flowLandingRetention, this.cfg.slideBoost, this.cfg.minimumSlideBoostSpeed),
+      flowSlideSpeed(sp, this.cfg.flowLandingRetention),
       nowMs,
     );
   }

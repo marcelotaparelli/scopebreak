@@ -836,6 +836,7 @@ export class Game {
       `<div class="stat"><span>precision</span><b>${precise}</b></div>` +
       `<div class="stat"><span>speed</span><b>${this.move.horizontalSpeed().toFixed(2)} m/s</b></div>` +
       `<div class="stat"><span>slideEntry</span><b>${this.move.lastSlideEntrySpeed.toFixed(1)}→${this.move.lastSlideBoostedSpeed.toFixed(1)}</b></div>` +
+      `<div class="stat"><span>land</span><b>${this.move.lastLandSpeedIn.toFixed(1)}→${this.move.lastLandSpeedOut.toFixed(1)}</b></div>` +
       `<div class="stat"><span>slideStarted</span><b>${this.move.events.justStartedSlide}</b></div>` +
       `<div class="stat"><span>flowLanding</span><b>${this.move.events.justFlowLanded}</b></div>` +
       `<div class="stat"><span>maxSpeed(life)</span><b>${this.telemetry.maxSpeedThisLife.toFixed(2)}</b></div>` +

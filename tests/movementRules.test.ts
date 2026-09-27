@@ -51,7 +51,7 @@ describe("momentum preservation", () => {
 
 describe("air control limits", () => {
   test("cannot instantly reverse", () => {
-    const r = airControlStep(10, 0, -1, 0, 32, 0.85, 16, 1 / 60);
+    const r = airControlStep(10, 0, -1, 0, 32, 0.85, 16, 9, 1 / 60);
     expect(r.vx).toBeGreaterThan(9);
   });
   test("curves gradually and respects speed cap", () => {
@@ -59,7 +59,7 @@ describe("air control limits", () => {
     let earlyVx = 0;
     let peak = 0;
     for (let i = 0; i < 60; i++) {
-      const r = airControlStep(vx, vz, 0, 1, 32, 0.85, 16, 1 / 60);
+      const r = airControlStep(vx, vz, 0, 1, 32, 0.85, 16, 9, 1 / 60);
       vx = r.vx; vz = r.vz;
       if (i === 14) earlyVx = vx;
       peak = Math.max(peak, Math.hypot(vx, vz));

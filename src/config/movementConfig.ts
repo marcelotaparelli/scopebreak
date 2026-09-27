@@ -6,6 +6,7 @@ export interface MovementConfig {
   groundAcceleration: number;
   groundDeceleration: number;
   groundFriction: number;
+  groundOverspeedDecay: number; // 1/s: excess above runSpeed bleeds off while running (no permanent ratchet)
   jumpForce: number;
   gravity: number;
   // air
@@ -50,6 +51,7 @@ export const movementConfig: MovementConfig = {
   groundAcceleration: 70,
   groundDeceleration: 55,
   groundFriction: 9.5,
+  groundOverspeedDecay: 2.5,
   jumpForce: 8.2,
   gravity: 23,
 
@@ -60,7 +62,7 @@ export const movementConfig: MovementConfig = {
   minimumSlideSpeed: 3.5,
   slideFriction: 0.55,
   slideControl: 0.45,
-  slideBoost: 1.32,
+  slideBoost: 1.4,
   minimumSlideBoostSpeed: 11.0,
   momentumRetention: 0.92,
   slideCooldownMs: 250,

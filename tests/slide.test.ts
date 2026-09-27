@@ -28,8 +28,8 @@ describe("slide boost", () => {
     const m = runner(9);
     m.update(DT, 2000, slideInput(), 0, FLOOR, 1);
     expect(m.sliding).toBe(true);
-    // 9 * 1.32 = 11.88 minus one frame of gentle friction
-    expect(m.horizontalSpeed()).toBeGreaterThan(11.4);
+    // 9 * slideBoost minus one frame of gentle friction
+    expect(m.horizontalSpeed()).toBeGreaterThan(9 * movementConfig.slideBoost - 0.4);
   });
 
   test("boost floor guarantees perceptible gain from low speed", () => {
@@ -43,16 +43,16 @@ describe("slide boost", () => {
     expect(m.sliding).toBe(true);
     expect(m.events.justStartedSlide).toBe(true);
     expect(m.lastSlideEntrySpeed).toBeCloseTo(9, 1);
-    expect(m.lastSlideBoostedSpeed).toBeCloseTo(11.88, 1);
+    expect(m.lastSlideBoostedSpeed).toBeCloseTo(9 * movementConfig.slideBoost, 1);
     expect(m.horizontalSpeed()).toBeGreaterThan(11.4);
   });
 
   test("already-fast entry is preserved, never pumped", () => {
     expect(slideBoostSpeed(14, 1.32, 11.0)).toBe(14);
-    // flow: fast landing keeps 95%, slow landing uses the normal entry rule
-    expect(flowSlideSpeed(13, 0.95, 1.32, 11.0)).toBeCloseTo(12.35, 5);
-    expect(flowSlideSpeed(11, 0.95, 1.32, 11.0)).toBeCloseTo(10.45, 5);
-    expect(flowSlideSpeed(5, 0.95, 1.32, 11.0)).toBe(11.0);
+    // flow: landing keeps 95% at ANY speed — never lifted, never multiplied
+    expect(flowSlideSpeed(13, 0.95)).toBeCloseTo(12.35, 5);
+    expect(flowSlideSpeed(11, 0.95)).toBeCloseTo(10.45, 5);
+    expect(flowSlideSpeed(5, 0.95)).toBeCloseTo(4.75, 5);
   });
 
   test("CASO 2 — same-frame override: rest of tick keeps the boost", () => {
