@@ -60,19 +60,19 @@ export const movementConfig: MovementConfig = {
   maxAirSpeed: 18,
 
   minimumSlideSpeed: 3.5,
-  slideFriction: 0.55,
+  slideFriction: 0.4,
   slideControl: 0.45,
-  slideBoostTargetSpeed: 12.8,
+  slideBoostTargetSpeed: 15.0,
   slideBoostStrength: 0.75,
   momentumRetention: 0.92,
   slideCooldownMs: 250,
 
   slideJumpHorizontalMultiplier: 1.07,
-  slideJumpMomentumRetention: 0.98,
-  slideJumpVerticalForce: 6.2,
+  slideJumpMomentumRetention: 1.0,
+  slideJumpVerticalForce: 10.0, // apex ≈2.1m vs normal 1.4m: clears 2m ledges normal jump can't
 
   flowLandingWindowMs: 200,
-  flowLandingRetention: 0.95,
+  flowLandingRetention: 1.0, // skilled flow landing keeps the flow: preserve, never boost
 
   wallKickHorizontalImpulse: 10.5,
   wallKickVerticalImpulse: 7.5,

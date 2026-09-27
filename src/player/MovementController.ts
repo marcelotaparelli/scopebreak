@@ -107,7 +107,11 @@ export class MovementController {
     const topSpeed = cfg.runSpeed * adsSlow;
 
     if (b.grounded) {
-      if (this.sliding) {
+      if (this.sliding && input.jumpPressed) {
+        // --- SLIDE → SPACE: one action. The slide's horizontal vector
+        // leaves untouched (no last-tick friction/steer), vertical is added.
+        this.doSlideJump(nowMs);
+      } else if (this.sliding) {
         // --- SLIDE: boosted entry, gentle decay, limited steering ---
         const sp = this.horizontalSpeed();
         const decayed = slideSpeedAfter(sp, cfg.slideFriction, dt);
@@ -125,9 +129,7 @@ export class MovementController {
         }
         b.height = cfg.slideHeight;
         // exit conditions
-        if (input.jumpPressed) {
-          this.doSlideJump(nowMs);
-        } else if (!input.slideHeld || decayed < 2.2) {
+        if (!input.slideHeld || decayed < 2.2) {
           this.endSlide(colliders);
         }
       } else {

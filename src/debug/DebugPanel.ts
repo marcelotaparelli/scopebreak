@@ -105,7 +105,7 @@ export class DebugPanel {
 
     const sj = this.section("SLIDE JUMP / FLOW / WALL");
     this.num(sj, "sjMomentumRet", () => mc().slideJumpMomentumRetention, (v) => (mc().slideJumpMomentumRetention = v), 0.9, 1.05, 0.01);
-    this.num(sj, "sjVertForce", () => mc().slideJumpVerticalForce, (v) => (mc().slideJumpVerticalForce = v), 3, 10, 0.1);
+    this.num(sj, "sjVertForce", () => mc().slideJumpVerticalForce, (v) => (mc().slideJumpVerticalForce = v), 3, 14, 0.1);
     this.num(sj, "flowWindowMs", () => mc().flowLandingWindowMs, (v) => (mc().flowLandingWindowMs = v), 50, 500, 10);
     this.num(sj, "flowRet", () => mc().flowLandingRetention, (v) => (mc().flowLandingRetention = v), 0.5, 1, 0.01);
     this.num(sj, "wallHoriz", () => mc().wallKickHorizontalImpulse, (v) => (mc().wallKickHorizontalImpulse = v), 4, 18, 0.5);

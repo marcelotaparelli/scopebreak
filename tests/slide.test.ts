@@ -50,9 +50,8 @@ describe("slide boost", () => {
   test("already-fast entry is preserved, never pumped", () => {
     expect(slideBoostSpeed(14, 12.8, 0.75)).toBe(14);
     // flow: landing keeps 95% at ANY speed — never lifted, never multiplied
-    expect(flowSlideSpeed(13, 0.95)).toBeCloseTo(12.35, 5);
-    expect(flowSlideSpeed(11, 0.95)).toBeCloseTo(10.45, 5);
-    expect(flowSlideSpeed(5, 0.95)).toBeCloseTo(4.75, 5);
+    // flow: landing keeps momentum at ANY speed — never lifted, never multiplied
+    for (const v of [5, 11, 13]) expect(flowSlideSpeed(v, movementConfig.flowLandingRetention)).toBe(v);
   });
 
   test("CASO 2 — same-frame override: rest of tick keeps the boost", () => {
@@ -85,19 +84,19 @@ describe("slide boost", () => {
 });
 
 describe("slide-jump momentum", () => {
-  test("preserves ~all horizontal speed with LOW vertical", () => {
+  test("SPACE during slide: same horizontal vector + a BIGGER vertical than a normal jump", () => {
     const m = runner(9);
     m.update(DT, 2000, slideInput(), 0, FLOOR, 1);
     const slideSpeed = m.horizontalSpeed();
     m.update(DT, 2016, slideInput({ jumpPressed: true }), 0, FLOOR, 1);
     expect(m.events.justSlideJumped).toBe(true);
     expect(m.body.grounded).toBe(false);
-    // 0.98 retention of slide speed
-    expect(m.horizontalSpeed()).toBeCloseTo(slideSpeed * 0.98, 0);
-    // own low vertical — clearly below a normal jump
-    // (same-frame gravity already applied: 6.2 - 23/60)
+    // FAST + HIGH: horizontal is not traded for height (no takeoff-tick friction)
+    expect(m.horizontalSpeed()).toBeCloseTo(slideSpeed * movementConfig.slideJumpMomentumRetention, 6);
+    expect(movementConfig.slideJumpMomentumRetention).toBeGreaterThanOrEqual(0.99);
+    // (same-frame gravity already applied)
     expect(m.body.vy).toBeCloseTo(movementConfig.slideJumpVerticalForce - (23 * DT), 5);
-    expect(movementConfig.slideJumpVerticalForce).toBeLessThan(movementConfig.jumpForce);
+    expect(movementConfig.slideJumpVerticalForce).toBeGreaterThan(movementConfig.jumpForce);
   });
 
   test("pure takeoff math", () => {
@@ -161,9 +160,9 @@ describe("CASO 4 — landing never manufactures a second boost", () => {
       m.update(DT, t, { forward: 0, strafe: 0, jumpPressed: false, slideHeld: true, shiftPressedAtMs: pressAt }, 0, FLOOR, 1);
       if (m.events.justFlowLanded) {
         flowed = true;
-        // 11 * 0.95 = 10.45 preserved — visibly NOT multiplied by 1.32
-        expect(m.horizontalSpeed()).toBeLessThan(11.2);
-        expect(m.horizontalSpeed()).toBeGreaterThan(9.5);
+        // 11 preserved — NOT boosted, NOT cut
+        expect(m.horizontalSpeed()).toBeLessThanOrEqual(11 + 1e-6);
+        expect(m.horizontalSpeed()).toBeGreaterThan(10.9);
         break;
       }
       if (m.body.grounded && i > 5) break;

@@ -127,24 +127,25 @@ describe("real pipeline — slide-jump and landing", () => {
   });
 
   test("6. fresh Shift just before landing: flow slide preserves, never multiplies", () => {
-    const s = simulate([...slideJump, { t: 1400, up: "Shift" }, { t: 1700, down: "Shift" }], 2200);
+    const s = simulate([...slideJump, { t: 1400, up: "Shift" }, { t: 2050, down: "Shift" }], 2600);
     const i = first(s, (x) => x.flowLanded);
     expect(i).toBeGreaterThan(0);
     expect(s[i]!.sliding).toBe(true);
     expect(s[i]!.speed).toBeLessThanOrEqual(s[i - 1]!.speed);
-    expect(s[i]!.speed).toBeGreaterThan(s[i - 1]!.speed * 0.9);
+    // ...and keeps the flow: ~100% preserved, no landing tax
+    expect(s[i]!.speed).toBeGreaterThan(s[i - 1]!.speed - 1e-6);
   });
 
   test("6b. fresh Shift just AFTER landing is a late flow entry, not a boost", () => {
-    const s = simulate([...slideJump, { t: 1400, up: "Shift" }, { t: 1870, down: "Shift" }], 2200);
+    const s = simulate([...slideJump, { t: 1400, up: "Shift" }, { t: 2250, down: "Shift" }], 2600);
     const l = first(s, (x, i) => i > 0 && x.grounded && !s[i - 1]!.grounded);
-    const i = first(s, (x) => x.startedSlide && x.t >= 1870);
+    const i = first(s, (x) => x.startedSlide && x.t >= 2250);
     expect(i).toBeGreaterThan(l);
     expect(s[i]!.speed).toBeLessThanOrEqual(s[l - 1]!.speed);
   });
 
   test("6c. early mid-air Shift (outside window) held into landing: no ground boost", () => {
-    const s = simulate([...slideJump, { t: 1400, up: "Shift" }, { t: 1450, down: "Shift" }], 2400);
+    const s = simulate([...slideJump, { t: 1400, up: "Shift" }, { t: 1450, down: "Shift" }], 2800);
     const l = first(s, (x, i) => i > 0 && x.grounded && !s[i - 1]!.grounded);
     for (let i = l; i < s.length; i++) expect(s[i]!.startedSlide).toBe(false);
   });

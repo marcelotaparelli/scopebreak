@@ -165,10 +165,10 @@ describe("long chain: no unbounded speed pumping", () => {
     expect(lands.length).toBe(cycles);
     const peak = Math.max(...s.map((x) => x.speed));
     expect(peak).toBeLessThanOrEqual(movementConfig.slideBoostTargetSpeed + 1e-6);
-    // converging: cycle-to-cycle gain shrinks and is ~0 at the end
+    // no cycle-to-cycle growth, and the chain settles (never below run − ε)
     const gains = lands.slice(1).map((v, i) => v - lands[i]!);
-    for (let i = 1; i < gains.length; i++) expect(gains[i]!).toBeLessThanOrEqual(gains[i - 1]! + 1e-6);
-    expect(Math.abs(gains[gains.length - 1]!)).toBeLessThan(0.005);
-    expect(lands[lands.length - 1]! - lands[5]!).toBeLessThan(0.3);
+    for (const g of gains) expect(g).toBeLessThan(0.05);
+    for (const v of lands) expect(v).toBeGreaterThanOrEqual(RUN - 1e-6);
+    expect(Math.abs(lands[lands.length - 1]! - lands[lands.length - 2]!)).toBeLessThan(0.01);
   });
 });
