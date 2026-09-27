@@ -28,6 +28,7 @@ export interface MovementConfig {
   // flow landing
   flowLandingWindowMs: number;
   flowLandingRetention: number;
+  flowLandingFrictionGraceMs: number; // after a VALID flow entry only: slide friction paused (never a boost)
   // wall kick
   wallKickHorizontalImpulse: number;
   wallKickVerticalImpulse: number;
@@ -73,6 +74,7 @@ export const movementConfig: MovementConfig = {
 
   flowLandingWindowMs: 200,
   flowLandingRetention: 1.0, // skilled flow landing keeps the flow: preserve, never boost
+  flowLandingFrictionGraceMs: 50, // flow land → Space within the next 2 frames @60Hz keeps 100%
 
   wallKickHorizontalImpulse: 10.5,
   wallKickVerticalImpulse: 7.5,

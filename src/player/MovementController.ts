@@ -59,6 +59,8 @@ export class MovementController {
   private lastShiftPressMs = -10_000;
   private slideDirX = 0;
   private slideDirZ = 0;
+  /** Set ONLY by a validated flow entry: slide friction is paused until then. */
+  private frictionGraceUntilMs = -10_000;
 
   reset(x: number, y: number, z: number): void {
     this.body = { x, y, z, vx: 0, vy: 0, vz: 0, radius: 0.35, height: this.cfg.standingHeight, grounded: true };
@@ -69,6 +71,7 @@ export class MovementController {
     this.wasGrounded = true;
     this.slideArmed = false;
     this.slideArmedInAir = false;
+    this.frictionGraceUntilMs = -10_000;
   }
 
   horizontalSpeed(): number {
@@ -114,7 +117,8 @@ export class MovementController {
       } else if (this.sliding) {
         // --- SLIDE: boosted entry, gentle decay, limited steering ---
         const sp = this.horizontalSpeed();
-        const decayed = slideSpeedAfter(sp, cfg.slideFriction, dt);
+        // flow grace: friction paused (magnitude kept as-is, never raised)
+        const decayed = nowMs < this.frictionGraceUntilMs ? sp : slideSpeedAfter(sp, cfg.slideFriction, dt);
         if (sp > 0.01) {
           const nx = b.vx / sp;
           const nz = b.vz / sp;
@@ -311,6 +315,7 @@ export class MovementController {
 
   /** Normal entry: RUN → SHIFT. Kicks below the floor, preserves above it. */
   private startSlide(nowMs: number): void {
+    this.frictionGraceUntilMs = -10_000; // normal entry: boost + normal friction, no grace
     const sp = this.horizontalSpeed();
     this.enterSlideWithSpeed(
       slideBoostSpeed(sp, this.cfg.slideBoostTargetSpeed, this.cfg.slideBoostStrength),
@@ -325,6 +330,7 @@ export class MovementController {
       flowSlideSpeed(sp, this.cfg.flowLandingRetention),
       nowMs,
     );
+    this.frictionGraceUntilMs = nowMs + this.cfg.flowLandingFrictionGraceMs;
   }
 
   /**

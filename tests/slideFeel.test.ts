@@ -144,3 +144,128 @@ describe("FLOW LANDING = KEEP THE FLOW", () => {
     expect(r.peak).toBeLessThanOrEqual(C.slideBoostTargetSpeed + 1e-6);
   });
 });
+
+// ---------------- flow-landing friction grace ----------------
+// GameLoop-faithful: 60Hz frames, 2 × 1/120 substeps sharing the frame
+// timestamp. Reactive player: fresh Shift ~120ms before predicted touchdown
+// (or held from the start when `holdShift`), Space `spaceMs` after touchdown.
+interface FlowCycle { pre: number; post: number; flow: boolean; midGrace: number; takeoff: number }
+function flowChain(cycles: number, spaceMs: number, holdShift = false): { cyc: FlowCycle[]; peak: number; normalEntry: number; landings: boolean[] } {
+  const m = new MovementController();
+  m.reset(0, 0.001, 900);
+  let shiftAt = -1e4, shift = false, landAt = -1, pressed = false, jumpQ = false, wasG = true, started = false;
+  let peak = 0, normalEntry = 0;
+  let cur: FlowCycle | null = null;
+  const cyc: FlowCycle[] = [];
+  const landings: boolean[] = [];
+  for (let fr = 0; fr < 60 * 200 && cyc.length < cycles; fr++) {
+    const now = (fr * 1000) / 60;
+    const b = m.body;
+    if (!started && now >= 1000) { shift = true; shiftAt = now; started = true; landAt = now; }
+    if (!holdShift && !b.grounded && !pressed && b.vy < 0 && (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * b.y)) / C.gravity <= 0.12) {
+      shift = true; shiftAt = now; pressed = true;
+    }
+    if (landAt >= 0 && now - landAt >= spaceMs - 1e-6) { jumpQ = true; landAt = -1; }
+    for (let k = 0; k < 2; k++) {
+      const jp = jumpQ;
+      jumpQ = false;
+      const before = m.horizontalSpeed();
+      m.update(STEP, now, { forward: 1, strafe: 0, jumpPressed: jp, slideHeld: shift, shiftPressedAtMs: shiftAt }, 0, FLOOR, 1);
+      const sp = m.horizontalSpeed();
+      peak = Math.max(peak, sp);
+      if (m.events.justStartedSlide && !m.events.justFlowLanded && cyc.length === 0 && !cur) normalEntry = sp;
+      if (m.body.grounded && !wasG) {
+        cur = { pre: before, post: sp, flow: m.events.justFlowLanded, midGrace: sp, takeoff: NaN };
+        landings.push(m.events.justFlowLanded);
+        if (holdShift && landings.length >= cycles) return { cyc, peak, normalEntry, landings };
+        landAt = now;
+      } else if (cur && m.sliding && now - landAt < 40) cur.midGrace = sp;
+      if (m.events.justSlideJumped) {
+        if (cur) { cur.takeoff = sp; cyc.push(cur); cur = null; }
+        if (!holdShift) shift = false;
+        pressed = false;
+      }
+      wasG = m.body.grounded;
+    }
+  }
+  return { cyc, peak, normalEntry, landings };
+}
+
+describe("FLOW LANDING friction grace (perfect flow = keep speed)", () => {
+  test("grace is configured and short", () => {
+    expect(C.flowLandingFrictionGraceMs).toBeGreaterThanOrEqual(40);
+    expect(C.flowLandingFrictionGraceMs).toBeLessThanOrEqual(60);
+  });
+
+  test("flow landing adds nothing; inside the grace speed is held at 100%", () => {
+    const { cyc } = flowChain(5, 17);
+    expect(cyc.length).toBe(5);
+    for (const c of cyc) {
+      expect(c.flow).toBe(true);
+      expect(c.post).toBeLessThanOrEqual(c.pre + 1e-9);
+      expect(c.post).toBeCloseTo(c.pre, 9);
+      expect(c.midGrace).toBeCloseTo(c.pre, 9);
+    }
+  });
+
+  test("Space inside the grace takes off with the exact pre-land horizontal speed", () => {
+    for (const ms of [17, 33]) {
+      const { cyc } = flowChain(5, ms);
+      expect(cyc.length).toBe(5);
+      for (const c of cyc) expect(c.takeoff).toBeCloseTo(c.pre, 9);
+    }
+  });
+
+  test("Space after the grace pays normal slide friction", () => {
+    const { cyc } = flowChain(5, 100);
+    expect(cyc.length).toBe(5);
+    for (const c of cyc) {
+      expect(c.takeoff).toBeLessThan(c.pre * 0.99);
+      // at most ~100ms of friction (the grace covered the start)
+      expect(c.takeoff).toBeGreaterThan(c.pre * Math.exp(-C.slideFriction * 0.1) - 1e-6);
+    }
+  });
+
+  test("a normal RUN → SHIFT slide gets no grace: friction from the next tick", () => {
+    const m = new MovementController();
+    m.reset(0, 0.001, 900);
+    m.body.vx = RUN;
+    const input = { forward: 1, strafe: 0, jumpPressed: false, slideHeld: true, shiftPressedAtMs: 1000 };
+    m.update(STEP, 1000, input, 0, FLOOR, 1);
+    expect(m.events.justStartedSlide).toBe(true);
+    const entry = m.horizontalSpeed();
+    m.update(STEP, 1000, input, 0, FLOOR, 1);
+    expect(m.horizontalSpeed()).toBeLessThan(entry);
+  });
+
+  test("Shift HELD through touchdown: no flow re-trigger, so no grace either", () => {
+    const { landings } = flowChain(1, 17, true);
+    // held Shift never produces a flow landing
+    expect(landings).toEqual([false]);
+  });
+
+  test("PERFECT × 20: speed stays constant", () => {
+    const { cyc } = flowChain(20, 17);
+    expect(cyc.length).toBe(20);
+    const t = cyc.map((c) => c.takeoff);
+    expect(Math.max(...t) - Math.min(...t)).toBeLessThan(0.01);
+    expect(t[t.length - 1]!).toBeGreaterThan(13);
+  });
+
+  test("LATE Space × 20: speed decays gradually (mistake = lose speed)", () => {
+    for (const ms of [100, 250]) {
+      const t = flowChain(20, ms).cyc.map((c) => c.takeoff);
+      expect(t.length).toBe(20);
+      for (let i = 1; i < t.length; i++) expect(t[i]!).toBeLessThanOrEqual(t[i - 1]! + 1e-6);
+      expect(t[t.length - 1]!).toBeLessThan(t[0]! - 1);
+    }
+  });
+
+  test("no sequence ever exceeds the speed the last normal slide gave", () => {
+    for (const ms of [17, 33, 100, 250]) {
+      const r = flowChain(20, ms);
+      expect(r.normalEntry).toBeGreaterThan(13);
+      expect(r.peak).toBeLessThanOrEqual(r.normalEntry + 1e-9);
+    }
+  });
+});
