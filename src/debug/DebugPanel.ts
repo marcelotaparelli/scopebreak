@@ -97,7 +97,7 @@ export class DebugPanel {
     this.num(s, "boostTarget", () => mc().slideBoostTargetSpeed, (v) => (mc().slideBoostTargetSpeed = v), 9, 16, 0.1);
     this.num(s, "boostStrength", () => mc().slideBoostStrength, (v) => (mc().slideBoostStrength = v), 0, 1, 0.05);
     this.num(s, "slideFriction", () => mc().slideFriction, (v) => (mc().slideFriction = v), 0, 6, 0.05);
-    this.num(s, "slideSteering", () => mc().slideControl, (v) => (mc().slideControl = v), 0, 1, 0.05);
+    this.num(s, "slideTurnRate°/s", () => mc().slideTurnRateDeg, (v) => (mc().slideTurnRateDeg = v), 0, 360, 5);
     this.num(s, "momentumRet", () => mc().momentumRetention, (v) => (mc().momentumRetention = v), 0.5, 1, 0.01);
     this.num(s, "slideHeight", () => mc().slideHeight, (v) => (mc().slideHeight = v), 0.8, 1.6, 0.05);
     this.num(s, "slideCamMs", () => mc().slideCameraTransitionMs, (v) => (mc().slideCameraTransitionMs = v), 40, 400, 10);

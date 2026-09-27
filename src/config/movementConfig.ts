@@ -16,7 +16,8 @@ export interface MovementConfig {
   // slide
   minimumSlideSpeed: number;
   slideFriction: number;
-  slideControl: number; // steering authority while sliding (0..1)
+  slideTurnRateDeg: number; // max slide direction change toward camera+WASD, deg/s (magnitude kept)
+  slideSteerOppositeDeg: number; // wish further than this from velocity (e.g. S) does not steer
   slideBoostTargetSpeed: number; // slide entry pulls speed toward this (never pulls down); above it = preserve
   slideBoostStrength: number; // 0..1 fraction of the gap to the target added on entry (diminishing returns)
   momentumRetention: number; // fraction of horizontal speed kept on slide exit
@@ -62,7 +63,8 @@ export const movementConfig: MovementConfig = {
 
   minimumSlideSpeed: 3.5,
   slideFriction: 0.4,
-  slideControl: 0.45,
+  slideTurnRateDeg: 100,
+  slideSteerOppositeDeg: 150,
   slideBoostTargetSpeed: 17.0,
   slideBoostStrength: 0.75,
   momentumRetention: 0.92,

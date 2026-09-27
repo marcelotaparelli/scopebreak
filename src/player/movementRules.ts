@@ -115,6 +115,32 @@ export function airControlStep(
   return { vx: nvx, vz: nvz };
 }
 
+/**
+ * Slide steering: rotate the CURRENT velocity toward the wish direction
+ * (camera yaw + WASD) by at most `maxTurnRad` this step. Pure rotation —
+ * magnitude is untouched (friction is applied separately). Momentum rules:
+ * never snaps to the wish, and a near-opposite wish (|Δ| > oppositeRad,
+ * e.g. S while sliding forward) does not steer at all — no reverse-slide.
+ */
+export function slideSteerStep(
+  vx: number,
+  vz: number,
+  wishX: number,
+  wishZ: number,
+  maxTurnRad: number,
+  oppositeRad: number,
+): { vx: number; vz: number; diffRad: number } {
+  const sp = Math.hypot(vx, vz);
+  if (sp < 1e-6 || Math.hypot(wishX, wishZ) < 1e-6) return { vx, vz, diffRad: 0 };
+  // signed angle from velocity to wish
+  const diff = Math.atan2(vx * wishZ - vz * wishX, vx * wishX + vz * wishZ);
+  if (Math.abs(diff) > oppositeRad) return { vx, vz, diffRad: diff };
+  const turn = Math.max(-maxTurnRad, Math.min(maxTurnRad, diff));
+  const c = Math.cos(turn);
+  const s = Math.sin(turn);
+  return { vx: vx * c - vz * s, vz: vx * s + vz * c, diffRad: diff };
+}
+
 /** Flow landing: Shift pressed within window before OR after touchdown. */
 export function isFlowLanding(args: {
   timeSinceShiftMs: number; // ms since Shift went down (Infinity if not pressed)

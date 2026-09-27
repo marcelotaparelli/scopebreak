@@ -9,8 +9,11 @@ import {
   slideJumpTakeoff,
   slideJumpVelocity,
   slideSpeedAfter,
+  slideSteerStep,
 } from "./movementRules.js";
 import { hasHeadroom, moveAndCollide, probeWalls, type AABB, type KinematicBody } from "../world/physics.js";
+
+const DEG = Math.PI / 180;
 
 export interface MoveInput {
   forward: number; // -1..1 (W+)
@@ -50,6 +53,9 @@ export class MovementController {
   /** Last touchdown (debug): horizontal speed right before → right after landing. */
   lastLandSpeedIn = 0;
   lastLandSpeedOut = 0;
+  /** Slide steering (debug): wish heading and signed angle velocity→wish, degrees. */
+  slideWishDeg = NaN;
+  slideSteerDiffDeg = 0;
   /**
    * One Shift press = at most one slide entry. Armed on the keydown edge,
    * consumed by the entry it produces; holding Shift never re-arms it.
@@ -115,21 +121,20 @@ export class MovementController {
         // leaves untouched (no last-tick friction/steer), vertical is added.
         this.doSlideJump(nowMs);
       } else if (this.sliding) {
-        // --- SLIDE: boosted entry, gentle decay, limited steering ---
+        // --- SLIDE: boosted entry, gentle decay, momentum-based steering ---
         const sp = this.horizontalSpeed();
         // flow grace: friction paused (magnitude kept as-is, never raised)
         const decayed = nowMs < this.frictionGraceUntilMs ? sp : slideSpeedAfter(sp, cfg.slideFriction, dt);
         if (sp > 0.01) {
-          const nx = b.vx / sp;
-          const nz = b.vz / sp;
-          // steer: blend slide dir toward wish
-          const steer = cfg.slideControl * dt * (hasInput ? 1 : 0);
-          let dx = nx + wishX * steer * 2.2;
-          let dz = nz + wishZ * steer * 2.2;
-          const dl = Math.hypot(dx, dz) || 1;
-          dx /= dl; dz /= dl;
-          b.vx = dx * decayed;
-          b.vz = dz * decayed;
+          // steer: rotate the real velocity toward camera+WASD at a capped
+          // turn rate (never snaps, never rebuilt from the camera)
+          const r = hasInput
+            ? slideSteerStep(b.vx, b.vz, wishX, wishZ, cfg.slideTurnRateDeg * DEG * dt, cfg.slideSteerOppositeDeg * DEG)
+            : { vx: b.vx, vz: b.vz, diffRad: 0 };
+          this.slideSteerDiffDeg = r.diffRad / DEG;
+          this.slideWishDeg = hasInput ? Math.atan2(wishX, -wishZ) / DEG : NaN;
+          b.vx = (r.vx / sp) * decayed;
+          b.vz = (r.vz / sp) * decayed;
         }
         b.height = cfg.slideHeight;
         // exit conditions
