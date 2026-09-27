@@ -23,6 +23,9 @@ export function slideEntrySpeed(entrySpeed: number, boost: number): number {
  * always reads as FASTER. Applied exactly once per slide entry.
  * Anti-pump: at/above the floor the current speed is PRESERVED as-is —
  * entering a slide never manufactures speed out of already-fast momentum.
+ * Below the floor, residual overspeed from a previous chain is multiplied,
+ * so repeated chains creep (e.g. 12.6 → 12.8) but converge geometrically;
+ * output is always < minBoostSpeed × multiplier (tests/adsMovement.test.ts).
  */
 export function slideBoostSpeed(current: number, multiplier: number, minBoostSpeed: number): number {
   if (current >= minBoostSpeed) return current;

@@ -14,7 +14,11 @@ export interface WeaponConfig {
   bodyDamage: number;
   headDamage: number;
   hipSpreadDeg: number;
-  moveSpeedMultiplier: number; // applied to runSpeed while ADS
+  /**
+   * Run-speed target while ADS (weapon weight, not an aim penalty). Only
+   * caps how fast RUN input accelerates; 1 = aiming is movement-neutral.
+   */
+  moveSpeedMultiplier: number;
   recoilKick: number; // camera pitch kick in degrees
   scopeFov: number;
 }
@@ -34,7 +38,7 @@ export const weaponConfigs: Record<WeaponId, WeaponConfig> = {
     bodyDamage: 80,
     headDamage: 150,
     hipSpreadDeg: 5.5,
-    moveSpeedMultiplier: 0.92,
+    moveSpeedMultiplier: 1, // AGILITY + PRECISION: ADS / quickscope never costs momentum
     recoilKick: 2.2,
     scopeFov: 32,
   },
