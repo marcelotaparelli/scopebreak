@@ -94,8 +94,8 @@ export class DebugPanel {
 
     const s = this.section("SLIDE");
     this.num(s, "minSlideSpeed", () => mc().minimumSlideSpeed, (v) => (mc().minimumSlideSpeed = v), 0, 8, 0.1);
-    this.num(s, "slideBoostMult", () => mc().slideBoost, (v) => (mc().slideBoost = v), 1, 1.6, 0.01);
-    this.num(s, "minBoostSpeed", () => mc().minimumSlideBoostSpeed, (v) => (mc().minimumSlideBoostSpeed = v), 6, 16, 0.1);
+    this.num(s, "boostTarget", () => mc().slideBoostTargetSpeed, (v) => (mc().slideBoostTargetSpeed = v), 9, 16, 0.1);
+    this.num(s, "boostStrength", () => mc().slideBoostStrength, (v) => (mc().slideBoostStrength = v), 0, 1, 0.05);
     this.num(s, "slideFriction", () => mc().slideFriction, (v) => (mc().slideFriction = v), 0, 6, 0.05);
     this.num(s, "slideSteering", () => mc().slideControl, (v) => (mc().slideControl = v), 0, 1, 0.05);
     this.num(s, "momentumRet", () => mc().momentumRetention, (v) => (mc().momentumRetention = v), 0.5, 1, 0.01);

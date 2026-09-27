@@ -19,17 +19,16 @@ export function slideEntrySpeed(entrySpeed: number, boost: number): number {
 }
 
 /**
- * Slide boost on valid entry: momentum-based with a floor so Shift
- * always reads as FASTER. Applied exactly once per slide entry.
- * Anti-pump: at/above the floor the current speed is PRESERVED as-is —
- * entering a slide never manufactures speed out of already-fast momentum.
- * Below the floor, residual overspeed from a previous chain is multiplied,
- * so repeated chains creep (e.g. 12.6 → 12.8) but converge geometrically;
- * output is always < minBoostSpeed × multiplier (tests/adsMovement.test.ts).
+ * Slide boost on valid entry — DIMINISHING RETURNS, no threshold:
+ * close `strength` of the gap to `target`. Run speed gets a big kick,
+ * faster entries a progressively smaller one, at/above the target the
+ * speed is PRESERVED (never pulled down). Applied once per entry.
+ * Continuous and monotonic (slope 1 - strength below target, 1 above),
+ * and output ≤ max(current, target), so chains can't pump past target.
  */
-export function slideBoostSpeed(current: number, multiplier: number, minBoostSpeed: number): number {
-  if (current >= minBoostSpeed) return current;
-  return Math.max(current * multiplier, minBoostSpeed);
+export function slideBoostSpeed(current: number, target: number, strength: number): number {
+  if (current >= target) return current;
+  return current + (target - current) * strength;
 }
 
 /**

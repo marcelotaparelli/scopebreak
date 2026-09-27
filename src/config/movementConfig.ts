@@ -17,8 +17,8 @@ export interface MovementConfig {
   minimumSlideSpeed: number;
   slideFriction: number;
   slideControl: number; // steering authority while sliding (0..1)
-  slideBoost: number; // multiplier applied to entry speed on slide start (boost once per entry)
-  minimumSlideBoostSpeed: number; // floor for boosted entry speed — Shift must feel faster
+  slideBoostTargetSpeed: number; // slide entry pulls speed toward this (never pulls down); above it = preserve
+  slideBoostStrength: number; // 0..1 fraction of the gap to the target added on entry (diminishing returns)
   momentumRetention: number; // fraction of horizontal speed kept on slide exit
   slideCooldownMs: number;
   // slide jump (own takeoff: LOW + LONG, less vertical than a normal jump)
@@ -62,8 +62,8 @@ export const movementConfig: MovementConfig = {
   minimumSlideSpeed: 3.5,
   slideFriction: 0.55,
   slideControl: 0.45,
-  slideBoost: 1.4,
-  minimumSlideBoostSpeed: 11.0,
+  slideBoostTargetSpeed: 12.8,
+  slideBoostStrength: 0.75,
   momentumRetention: 0.92,
   slideCooldownMs: 250,
 

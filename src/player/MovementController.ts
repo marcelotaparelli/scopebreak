@@ -311,7 +311,7 @@ export class MovementController {
   private startSlide(nowMs: number): void {
     const sp = this.horizontalSpeed();
     this.enterSlideWithSpeed(
-      slideBoostSpeed(sp, this.cfg.slideBoost, this.cfg.minimumSlideBoostSpeed),
+      slideBoostSpeed(sp, this.cfg.slideBoostTargetSpeed, this.cfg.slideBoostStrength),
       nowMs,
     );
   }

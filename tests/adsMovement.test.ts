@@ -116,7 +116,7 @@ describe("Viper ADS is movement-neutral", () => {
     const plain = simulate(base, 1600);
     const ads = simulate([...base, { t: 1100, down: "RMB" }], 1600);
     expect(at(ads, 1100).sliding).toBe(true);
-    expect(at(ads, 1100).speed).toBeGreaterThan(RUN + 2.5);
+    expect(at(ads, 1100).speed).toBeGreaterThan(RUN + 2);
     expectSameMotion(ads, plain);
   });
 
@@ -124,7 +124,7 @@ describe("Viper ADS is movement-neutral", () => {
     const plain = simulate(slideJump, 2000);
     const ads = simulate([...slideJump, { t: 1400, down: "RMB" }], 2000);
     expect(at(ads, 1400).grounded).toBe(false);
-    expect(at(ads, 1400).speed).toBeGreaterThan(RUN + 1);
+    expect(at(ads, 1400).speed).toBeGreaterThan(RUN + 0.5);
     expectSameMotion(ads, plain);
   });
 
@@ -149,10 +149,9 @@ describe("Viper ADS is movement-neutral", () => {
 });
 
 describe("long chain: no unbounded speed pumping", () => {
-  // Cadence that reproduces the playtest 12.6 → 12.9 creep: ~330ms of RUN
-  // between landing and the next Shift leaves residual overspeed (<11) that
-  // the normal entry boost multiplies (×1.4). Growth is geometric and
-  // converges; the entry boost is capped at minimumSlideBoostSpeed × slideBoost.
+  // Cadence that reproduced the old 12.6 → 12.9 creep: ~330ms of RUN between
+  // landing and the next Shift leaves residual overspeed that the normal
+  // entry boost acts on. Entry output ≤ max(current, slideBoostTargetSpeed).
   test("6. slide → jump → land × 20 converges and stays bounded", () => {
     const ev: KeyEvent[] = [{ t: 0, down: "W" }];
     const cycles = 20;
@@ -165,7 +164,7 @@ describe("long chain: no unbounded speed pumping", () => {
     for (let i = 1; i < s.length; i++) if (s[i]!.grounded && !s[i - 1]!.grounded) lands.push(s[i]!.speed);
     expect(lands.length).toBe(cycles);
     const peak = Math.max(...s.map((x) => x.speed));
-    expect(peak).toBeLessThan(movementConfig.minimumSlideBoostSpeed * movementConfig.slideBoost);
+    expect(peak).toBeLessThanOrEqual(movementConfig.slideBoostTargetSpeed + 1e-6);
     // converging: cycle-to-cycle gain shrinks and is ~0 at the end
     const gains = lands.slice(1).map((v, i) => v - lands[i]!);
     for (let i = 1; i < gains.length; i++) expect(gains[i]!).toBeLessThanOrEqual(gains[i - 1]! + 1e-6);

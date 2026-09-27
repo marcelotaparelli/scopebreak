@@ -28,13 +28,13 @@ describe("slide boost", () => {
     const m = runner(9);
     m.update(DT, 2000, slideInput(), 0, FLOOR, 1);
     expect(m.sliding).toBe(true);
-    // 9 * slideBoost minus one frame of gentle friction
-    expect(m.horizontalSpeed()).toBeGreaterThan(9 * movementConfig.slideBoost - 0.4);
+    // boosted entry minus one frame of gentle friction
+    expect(m.horizontalSpeed()).toBeGreaterThan(slideBoostSpeed(9, movementConfig.slideBoostTargetSpeed, movementConfig.slideBoostStrength) - 0.4);
   });
 
-  test("boost floor guarantees perceptible gain from low speed", () => {
-    expect(slideBoostSpeed(9, 1.32, 11.0)).toBeCloseTo(11.88, 2);
-    expect(slideBoostSpeed(3.5, 1.32, 11.0)).toBe(11.0);
+  test("boost guarantees perceptible gain from low speed", () => {
+    expect(slideBoostSpeed(9, 12.8, 0.75)).toBeCloseTo(11.85, 5);
+    expect(slideBoostSpeed(3.5, 12.8, 0.75)).toBeCloseTo(10.475, 5);
   });
 
   test("CASO 1 — normal entry boosts immediately, same update, no jump/landing", () => {
@@ -43,12 +43,12 @@ describe("slide boost", () => {
     expect(m.sliding).toBe(true);
     expect(m.events.justStartedSlide).toBe(true);
     expect(m.lastSlideEntrySpeed).toBeCloseTo(9, 1);
-    expect(m.lastSlideBoostedSpeed).toBeCloseTo(9 * movementConfig.slideBoost, 1);
+    expect(m.lastSlideBoostedSpeed).toBeCloseTo(slideBoostSpeed(9, movementConfig.slideBoostTargetSpeed, movementConfig.slideBoostStrength), 5);
     expect(m.horizontalSpeed()).toBeGreaterThan(11.4);
   });
 
   test("already-fast entry is preserved, never pumped", () => {
-    expect(slideBoostSpeed(14, 1.32, 11.0)).toBe(14);
+    expect(slideBoostSpeed(14, 12.8, 0.75)).toBe(14);
     // flow: landing keeps 95% at ANY speed — never lifted, never multiplied
     expect(flowSlideSpeed(13, 0.95)).toBeCloseTo(12.35, 5);
     expect(flowSlideSpeed(11, 0.95)).toBeCloseTo(10.45, 5);

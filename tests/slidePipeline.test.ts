@@ -82,7 +82,7 @@ describe("real pipeline — slide entry", () => {
   test("2. RUN → SHIFT → 100ms: still clearly above run speed", () => {
     const s = simulate([{ t: 0, down: "W" }, { t: 1000, down: "Shift" }], 1200);
     expect(at(s, 1100).sliding).toBe(true);
-    expect(at(s, 1100).speed).toBeGreaterThan(RUN + 2.5);
+    expect(at(s, 1100).speed).toBeGreaterThan(RUN + 2);
   });
 });
 
@@ -96,7 +96,7 @@ describe("real pipeline — slide-jump and landing", () => {
     const j = first(s, (x) => x.slideJumped);
     const slideSpeed = s[j - 1]!.speed;
     expect(s[j]!.speed).toBeGreaterThan(slideSpeed * 0.95);
-    expect(s[j]!.speed).toBeGreaterThan(RUN + 1);
+    expect(s[j]!.speed).toBeGreaterThan(RUN + 0.5);
     // whole airtime with W held: speed never grows (old bug: 9.9 → 18)
     for (let i = j; i < s.length && !s[i]!.grounded; i++) {
       expect(s[i]!.speed).toBeLessThanOrEqual(s[j]!.speed + 1e-6);
@@ -157,8 +157,8 @@ describe("real pipeline — slide-jump and landing", () => {
     }
     const s = simulate(ev, 1000 + 6 * 1100);
     const peak = Math.max(...s.map((x) => x.speed));
-    // one entry boost per press, preserved above the floor → never compounds
-    expect(peak).toBeLessThan(movementConfig.minimumSlideBoostSpeed * movementConfig.slideBoost);
+    // entry output ≤ max(current, target) → never compounds past the target
+    expect(peak).toBeLessThanOrEqual(movementConfig.slideBoostTargetSpeed + 1e-6);
     for (const l of landings(s)) expect(l.after).toBeLessThanOrEqual(l.before + 1e-6);
   });
 
