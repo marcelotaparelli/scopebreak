@@ -63,7 +63,7 @@ export const movementConfig: MovementConfig = {
   minimumSlideSpeed: 3.5,
   slideFriction: 0.4,
   slideControl: 0.45,
-  slideBoostTargetSpeed: 15.0,
+  slideBoostTargetSpeed: 17.0,
   slideBoostStrength: 0.75,
   momentumRetention: 0.92,
   slideCooldownMs: 250,

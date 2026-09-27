@@ -197,8 +197,9 @@ describe("CASO 5 — repeated slide→jump→land chain stays bounded", () => {
       }
       expect(m.body.grounded).toBe(true);
     }
-    expect(peak).toBeLessThan(14); // entry kick only, never compounded
-    expect(m.horizontalSpeed()).toBeLessThan(12.5);
+    // entry kick only (first press from run), never compounded
+    expect(peak).toBeLessThanOrEqual(slideBoostSpeed(9, movementConfig.slideBoostTargetSpeed, movementConfig.slideBoostStrength) + 1e-6);
+    expect(m.horizontalSpeed()).toBeLessThan(peak);
   });
 });
 
