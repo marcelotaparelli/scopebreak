@@ -110,7 +110,7 @@ describe("SHIFT + SPACE = SPEED + HEIGHT", () => {
     expect(sj.airtime).toBeGreaterThan(normal.airtime);
     expect(sj.dist).toBeGreaterThan(normal.dist * 1.5);
     // controlled: not a rocket
-    expect(sj.apex).toBeLessThan(2.6);
+    expect(sj.apex).toBeLessThan(3.0);
   });
 
   test("landing never creates speed", () => {

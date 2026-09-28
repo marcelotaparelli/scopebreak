@@ -56,9 +56,9 @@ export const movementConfig: MovementConfig = {
   groundDeceleration: 55,
   groundFriction: 9.5,
   groundOverspeedDecay: 2.5,
-  jumpForce: 10.0, // h ≈ 1.43m, airtime ≈ 0.53s
-  gravity: 34,
-  fallGravityMultiplier: 1.35, // falling g ≈ 45.9
+  jumpForce: 12.35, // h ≈ 1.86m, airtime ≈ 0.57s
+  gravity: 40,
+  fallGravityMultiplier: 1.35, // falling g = 54
 
   airAcceleration: 32,
   airControl: 0.85,
@@ -76,7 +76,7 @@ export const movementConfig: MovementConfig = {
 
   slideJumpHorizontalMultiplier: 1.07,
   slideJumpMomentumRetention: 1.0,
-  slideJumpVerticalForce: 12.2, // apex ≈2.14m vs normal 1.43m (clears 2m ledges), airtime ≈ 0.66s
+  slideJumpVerticalForce: 15.15, // h ≈ 2.81m vs normal 1.86m (only slide-jump clears 2m ledges), airtime ≈ 0.69s
 
   flowLandingWindowMs: 200,
   flowLandingRetention: 1.0, // skilled flow landing keeps the flow: preserve, never boost

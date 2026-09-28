@@ -70,19 +70,21 @@ describe("vertical feel: snappy, predictable, no float", () => {
     }
   });
 
-  test("3/4. airtime clearly shorter than the old floaty arc", () => {
+  test("3/4. higher jumps keep a short airtime (fast arc, not the old float)", () => {
+    expect(normal.airtime).toBeGreaterThan(0.5);
+    expect(slide.airtime).toBeGreaterThan(0.64);
     expect(normal.airtime).toBeLessThan(0.6);
     expect(normal.airtime).toBeLessThan(OLD.normalAir - 0.1);
     expect(slide.airtime).toBeLessThan(0.72);
     expect(slide.airtime).toBeLessThan(OLD.slideAir - 0.1);
   });
 
-  test("5/6/7. useful heights kept: normal ~1.4m, slide-jump > 2m (2m ledges), slide higher", () => {
-    expect(normal.height).toBeGreaterThan(1.3);
-    expect(normal.height).toBeLessThan(1.6);
-    expect(slide.height).toBeGreaterThan(2.0);
-    expect(slide.height).toBeLessThan(2.4);
-    expect(slide.height).toBeGreaterThan(normal.height * 1.3);
+  test("5/6/7. heights: normal ~1.85m (still < 2m ledges), slide-jump ~2.8m, slide clearly higher", () => {
+    expect(normal.height).toBeGreaterThan(1.75);
+    expect(normal.height).toBeLessThan(1.95); // 2m ledges stay slide-jump-only
+    expect(slide.height).toBeGreaterThan(2.7);
+    expect(slide.height).toBeLessThan(2.95); // 3m platform still needs the stairs
+    expect(slide.height).toBeGreaterThan(normal.height * 1.4);
   });
 
   test("8. slide-jump still reaches much further", () => {
@@ -117,6 +119,30 @@ describe("vertical feel: snappy, predictable, no float", () => {
     for (const a of [normal, slide]) {
       expect(a.landOut).toBeLessThanOrEqual(a.landIn + 1e-9);
       expect(a.vyLand).toBeLessThan(-8); // real drop, not a drift
+    }
+  });
+
+  test("10 (collisions). a low ceiling stops the rise cleanly: no tunneling, no stick, no speed", () => {
+    // ceiling slab 2.5–3.0m right above a runner (head reaches it at y ≈ 0.8)
+    const world = [...FLOOR, box(0, 2.5, 0, 200, 0.5, 2000)];
+    for (const slideJump of [false, true]) {
+      const m = new MovementController();
+      m.reset(0, 0.001, 900);
+      let maxTop = 0, jumped = false, t = 0, hitVy = NaN;
+      for (let i = 0; i < 360; i++, t += 1000 / 120) {
+        const space = t >= (slideJump ? 1100 : 1000) && !jumped && (!slideJump || m.sliding);
+        if (space) jumped = true;
+        const vyBefore = m.body.vy;
+        m.update(STEP, t, { forward: 1, strafe: 0, jumpPressed: space, slideHeld: slideJump && t >= 1000 && !jumped, shiftPressedAtMs: slideJump && t >= 1000 ? 1000 : -1e4 }, 0, world, 1);
+        maxTop = Math.max(maxTop, m.body.y + m.body.height);
+        if (jumped && Number.isNaN(hitVy) && vyBefore > 0 && m.body.vy <= 0 && m.body.y < 1) hitVy = m.body.vy;
+        if (jumped && m.body.grounded && i > 1) break;
+      }
+      expect(jumped).toBe(true);
+      expect(maxTop).toBeLessThanOrEqual(2.5 + 1e-6); // never inside / through the slab
+      expect(hitVy).toBeLessThanOrEqual(0); // bonked: rise cancelled, falls right away
+      expect(m.body.grounded).toBe(true);
+      expect(m.horizontalSpeed()).toBeLessThanOrEqual(slideJump ? 15.01 : 9.01);
     }
   });
 });
