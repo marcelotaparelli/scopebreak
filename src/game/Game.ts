@@ -9,10 +9,10 @@ import { CameraController } from "../player/CameraController.js";
 import { MovementController } from "../player/MovementController.js";
 import { classifyState } from "../player/PlayerState.js";
 import { adsSpreadDeg, decideLmbEdge, detectSkillEvents, isPrecisionReady, resolvePendingQuickshot } from "../player/movementRules.js";
-import { HitDetection } from "../combat/HitDetection.js";
-import { ShotCapture } from "../combat/ShotCapture.js";
+import { HitDetection, type HitscanResult } from "../combat/HitDetection.js";
+import { ShotCapture, type EchoTarget } from "../combat/ShotCapture.js";
 import type { ShotSnapshot } from "../combat/ShotSnapshot.js";
-import { ShotEcho } from "../feedback/ShotEcho.js";
+import { ShotEchoSession } from "../feedback/ShotEchoSession.js";
 import { buildImpactSketch } from "../feedback/ImpactSketch.js";
 import { describeEcho } from "../feedback/EchoCopy.js";
 import { ShotEchoRenderer } from "../feedback/ShotEchoRenderer.js";
@@ -27,6 +27,9 @@ import { DebugPanel } from "../debug/DebugPanel.js";
 import { GameLoop } from "./GameLoop.js";
 
 type AppMode = "menu" | "training" | "ffa";
+
+/** The local player's FFA score index (bots are 1..n). */
+const LOCAL_PLAYER_ID = 0;
 
 /**
  * SCOPEBREAK vertical slice: menu → training arena → movement + quickscope loop.
@@ -90,9 +93,9 @@ export class Game {
   private elMatchEnd!: HTMLElement;
   private combatFx: CombatFeedback;
   private skillFx: SkillFeedback;
-  // SHOT ECHO (training only): observes real shots, never alters them
+  // SHOT ECHO (training + offline FFA): observes the player's real shots, never alters them
   private shotCapture = new ShotCapture();
-  private shotEcho = new ShotEcho(shotEchoConfig);
+  private echoSession = new ShotEchoSession(shotEchoConfig);
   private echoFx!: ShotEchoRenderer;
   private gun = new THREE.Group();
   private gunKick = 0;
@@ -489,20 +492,7 @@ export class Game {
     const aimDir = this.cam.forwardDir();
     const dir = HitDetection.applySpread(aimDir, spread);
     const res = this.hits.resolve(origin, dir, 220, this.targets, this.arena.solidMeshes);
-    // SHOT ECHO snapshot: this IS the effective fire instant (buffered
-    // quickshots arrive here when they fire), taken before damage is applied
-    const echoSnap = this.appMode === "training" && shotEchoConfig.enabled
-      ? this.shotCapture.capture({
-        nowMs, weaponId: this.weapon.currentId, camera: this.camera, aimDir, shotDir: dir,
-        spreadDeg: spread, preciseSpreadDeg: gameplayConfig.adsSpreadDeg,
-        ads: this.weapon.adsActive, adsElapsedMs: this.weapon.adsElapsedMs(nowMs),
-        snapPrecisionMs: this.weapon.config.snapPrecisionMs,
-        sliding: this.move.sliding, airborne: !this.move.body.grounded,
-        horizontalSpeed: this.move.horizontalSpeed(), result: res,
-        targets: this.targets, walls: this.arena.solidMeshes,
-        maximumAnalysisAngleDeg: shotEchoConfig.maximumAnalysisAngleDeg,
-      })
-      : null;
+    const echoSnap = this.captureEchoShot(nowMs, aimDir, dir, spread, res, this.targets);
 
     this.cam.kickRecoil(this.weapon.config.recoilKick);
     this.gunKick = 1;
@@ -536,9 +526,37 @@ export class Game {
     if (echoSnap) this.presentShotEcho(echoSnap);
   }
 
+  /**
+   * SHOT ECHO snapshot of the local player's shot. Called inside fire() /
+   * fireFFA(), i.e. at the effective fire instant (buffered quickshots
+   * arrive here when they fire), after the raycast and BEFORE damage.
+   */
+  private captureEchoShot(
+    nowMs: number, aimDir: THREE.Vector3, dir: THREE.Vector3, spread: number,
+    res: HitscanResult, targets: readonly EchoTarget[],
+  ): ShotSnapshot | null {
+    if (!this.echoSession.isActive()) return null;
+    return this.shotCapture.capture({
+      nowMs, weaponId: this.weapon.currentId, camera: this.camera, aimDir, shotDir: dir,
+      spreadDeg: spread, preciseSpreadDeg: gameplayConfig.adsSpreadDeg,
+      ads: this.weapon.adsActive, adsElapsedMs: this.weapon.adsElapsedMs(nowMs),
+      snapPrecisionMs: this.weapon.config.snapPrecisionMs,
+      sliding: this.move.sliding, airborne: !this.move.body.grounded,
+      horizontalSpeed: this.move.horizontalSpeed(), result: res,
+      targets, walls: this.arena.solidMeshes,
+      maximumAnalysisAngleDeg: shotEchoConfig.maximumAnalysisAngleDeg,
+    });
+  }
+
+  /** Stop any on-screen echo and drop the pending diagnosis (death / respawn / match end). */
+  private interruptShotEcho(): void {
+    this.echoSession.interrupt();
+    this.echoFx.hide();
+  }
+
   /** Analyse → one message + ghost + sound → debug line. Runs once per real shot. */
   private presentShotEcho(s: ShotSnapshot): void {
-    const fb = this.shotEcho.onShot(s);
+    const fb = this.echoSession.onShot(LOCAL_PLAYER_ID, LOCAL_PLAYER_ID, s);
     if (!fb) return;
     const sk = buildImpactSketch(s, fb.analysis, shotEchoConfig);
     this.echoFx.show(fb, s.fovDeg, s.timeMs, fb.visible ? sk.sketch : null, describeEcho(fb, s.ads));
@@ -546,9 +564,10 @@ export class Game {
     else if (fb.sound === "corrected") this.combatFx.echoCorrected();
     const a = fb.analysis;
     const d = (v: { x: number; y: number; z: number }): string => `${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)}`;
-    const st = this.shotEcho.stats;
+    const st = this.echoSession.echo.stats;
     const row = (k: string, v: string): string => `<div class="stat"><span>${k}</span><b>${v}</b></div>`;
     this.debug.setShotEcho(
+      row("mode", this.echoSession.mode) +
       row("weapon / ADS", `${s.weaponId} / ${s.ads ? `on ${s.adsElapsedMs.toFixed(0)}ms (snap ${s.snapPrecisionMs})` : "hip"}`) +
       row("aim dir", d(s.aimDir)) +
       row("shot dir", d(s.shotDir)) +
@@ -575,7 +594,7 @@ export class Game {
   private enterTraining(): void {
     this.appMode = "training";
     this.clearPendingQuickshot();
-    this.shotEcho.reset();
+    this.echoSession.start("training");
     this.echoFx.hide();
     for (const t of this.targets) t.group.visible = true;
     for (const b of this.bots) this.scene.remove(b.group);
@@ -594,6 +613,8 @@ export class Game {
     this.ffa = new FFAMode("YOU", BOT_NAMES);
     this.ffa.start(nowMs);
     this.clearPendingQuickshot();
+    this.echoSession.start("ffa-offline"); // match start + rematch: nothing carries over
+    this.echoFx.hide();
     this.telemetry = new Telemetry();
     this.matchEndShown = false;
     this.elMatchEnd.style.display = "none";
@@ -642,9 +663,12 @@ export class Game {
     const spread = this.currentAdsSpread(nowMs);
 
     const origin = this.camera.position.clone();
-    const dir = HitDetection.applySpread(this.cam.forwardDir(), spread);
+    const aimDir = this.cam.forwardDir();
+    const dir = HitDetection.applySpread(aimDir, spread);
     const aliveBots = this.bots.filter((b) => b.alive);
     const res = this.hits.resolve(origin, dir, 220, aliveBots, this.arena.solidMeshes);
+    // bots read from the SAME hitbox meshes/matrices the raycast just used
+    const echoSnap = this.captureEchoShot(nowMs, aimDir, dir, spread, res, this.bots);
 
     this.cam.kickRecoil(this.weapon.config.recoilKick);
     this.gunKick = 1;
@@ -686,6 +710,7 @@ export class Game {
       this.ffa.registerMiss(0);
       if (res.blocked) this.combatFx.impact(res.point);
     }
+    if (echoSnap) this.presentShotEcho(echoSnap);
   }
 
   private updateFFA(dt: number, nowMs: number): void {
@@ -719,10 +744,12 @@ export class Game {
       this.playerAlive = true;
       this.weapon.ammoInMag = this.weapon.config.magazineSize;
       this.telemetry.resetLife();
+      this.interruptShotEcho();
     }
 
     if (this.ffa.state === "ended" && !this.matchEndShown) {
       this.matchEndShown = true;
+      this.interruptShotEcho();
       this.showMatchEnd();
     }
   }
@@ -783,6 +810,7 @@ export class Game {
       this.playerHealth = 0;
       this.playerAlive = false;
       this.clearPendingQuickshot();
+      this.interruptShotEcho();
       this.playerRespawnAtMs = nowMs + this.ffa.respawnMs;
       const ev = this.ffa.registerKill({
         killerIdx, victimIdx: 0, headshot, skills: headshot ? ["headshot"] : [],

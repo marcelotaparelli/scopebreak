@@ -150,9 +150,11 @@ export class DebugPanel {
       this.num(q, `${id}.snapMs`, () => cfg.snapPrecisionMs, (v) => (cfg.snapPrecisionMs = v), 0, 250, 5);
     }
 
-    const e = this.section("SHOT ECHO (training)");
+    const e = this.section("SHOT ECHO");
     const ec = shotEchoConfig;
     this.bool(e, "enabled", () => ec.enabled, (v) => (ec.enabled = v));
+    this.bool(e, "training", () => ec.trainingEnabled, (v) => (ec.trainingEnabled = v));
+    this.bool(e, "ffa (offline)", () => ec.ffaEnabled, (v) => (ec.ffaEnabled = v));
     this.num(e, "feedbackMs", () => ec.feedbackDurationMs, (v) => (ec.feedbackDurationMs = v), 250, 5000, 50);
     this.num(e, "fadeMs", () => ec.feedbackFadeMs, (v) => (ec.feedbackFadeMs = v), 0, 1000, 10);
     this.num(e, "correctedPriorityMs", () => ec.correctedPriorityMs, (v) => (ec.correctedPriorityMs = v), 0, 3000, 50);

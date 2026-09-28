@@ -65,6 +65,16 @@ export class ShotEcho {
     this.last = null;
   }
 
+  /** Forget the pending diagnosis (player died / respawned / match ended); counters kept. */
+  clearPending(): void {
+    this.pending = null;
+  }
+
+  /** Is a diagnosis waiting for a CORRECTED? (debug / tests) */
+  hasPending(): boolean {
+    return this.pending !== null;
+  }
+
   onShot(s: ShotSnapshot): EchoFeedback | null {
     if (!this.cfg.enabled) return null;
     const a = analyzeShot(s, this.cfg);

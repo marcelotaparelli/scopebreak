@@ -31,6 +31,8 @@ export class SimpleBot {
   yaw = 0;
   health = 100;
   alive = true;
+  /** Bumps on every respawn (SHOT ECHO: a correction never carries over to a new life). */
+  lifeId = 0;
   nextDecideMs = 0;
   nextShotMs = 0;
   waypoint = new THREE.Vector3();
@@ -61,6 +63,11 @@ export class SimpleBot {
     this.waypoint.copy(this.pos);
   }
 
+  /** Stable identity for analysis (same as the FFA score index). */
+  get id(): number {
+    return this.botIndex;
+  }
+
   get meshes(): THREE.Object3D[] {
     return [this.bodyMesh, this.headMesh];
   }
@@ -69,6 +76,7 @@ export class SimpleBot {
     this.pos.set(spawn.x, spawn.y, spawn.z);
     this.health = 100;
     this.alive = true;
+    this.lifeId++;
     this.group.visible = true;
     this.group.position.copy(this.pos);
     this.waypoint.set(

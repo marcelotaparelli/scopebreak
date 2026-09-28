@@ -1,7 +1,9 @@
 // SHOT ECHO v1 — instant precision feedback (Training only). Live-tunable (F1).
 
 export interface ShotEchoConfig {
-  enabled: boolean;
+  enabled: boolean; // master switch
+  trainingEnabled: boolean;
+  ffaEnabled: boolean; // offline FFA vs bots (never auto-enabled for online play)
   feedbackDurationMs: number; // correction text, total time on screen (fade included)
   feedbackFadeMs: number; // smooth exit at the END of feedbackDurationMs
   /** A visible CORRECTED is not replaced by a lower-priority message for this long. */
@@ -22,6 +24,8 @@ export interface ShotEchoConfig {
 
 export const shotEchoConfig: ShotEchoConfig = {
   enabled: true,
+  trainingEnabled: true,
+  ffaEnabled: true,
   feedbackDurationMs: 1500,
   feedbackFadeMs: 250,
   correctedPriorityMs: 700,

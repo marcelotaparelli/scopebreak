@@ -1,10 +1,21 @@
 import * as THREE from "three";
 import type { WeaponId } from "../config/weaponConfigs.js";
-import type { TrainingTarget } from "../world/TrainingTarget.js";
 import type { HitscanResult } from "./HitDetection.js";
 import type { ShotSnapshot, TargetSample, Vec3 } from "./ShotSnapshot.js";
 
 const v3 = (v: THREE.Vector3): Vec3 => ({ x: v.x, y: v.y, z: v.z });
+
+/**
+ * Anything the hitscan can hit that SHOT ECHO can analyse: training targets
+ * and FFA bots alike. `meshes` are the REAL combat hitboxes (head mesh has
+ * userData.part === "head"); `lifeId` changes on every respawn.
+ */
+export interface EchoTarget {
+  readonly id: number;
+  readonly lifeId: number;
+  readonly alive: boolean;
+  readonly meshes: THREE.Object3D[];
+}
 
 export interface ShotCaptureInput {
   nowMs: number; // the EFFECTIVE fire instant (fire() is only reached on a real shot)
@@ -21,7 +32,7 @@ export interface ShotCaptureInput {
   airborne: boolean;
   horizontalSpeed: number;
   result: HitscanResult;
-  targets: TrainingTarget[];
+  targets: readonly EchoTarget[];
   walls: THREE.Object3D[];
   maximumAnalysisAngleDeg: number;
 }
