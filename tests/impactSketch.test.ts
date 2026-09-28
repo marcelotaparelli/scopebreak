@@ -69,7 +69,7 @@ describe("Impact Sketch: bullet position relative to the head at the shot instan
   test("far misses stay on the diagram rim with their direction (flagged off-scale)", () => {
     const sk = sketchOf(shot({ aim: [-3.5, 0] })).sketch!;
     expect(sk.bulletClamped).toBe(true);
-    expect(sk.bullet.x).toBeCloseTo(-sk.extent * 0.9, 6);
+    expect(sk.bullet.x).toBeCloseTo(-sk.extent * 0.84, 6);
     expect(Math.abs(sk.bullet.y)).toBeLessThan(1e-6);
   });
 
@@ -165,5 +165,31 @@ describe("Impact Sketch size follows the text", () => {
     expect(sketchSizeFor(96.4, CFG)).toBe(96); // header + value + direction + 2 lines
     expect(sketchSizeFor(131, CFG)).toBe(131); // taller text → taller sketch
     expect(sketchSizeFor(20, CFG)).toBe(CFG.impactSketchMinSize);
+  });
+});
+
+describe("Impact Sketch framing: the head and the X are the focus", () => {
+  test("near miss zooms in (head big), X always fully inside the frame", () => {
+    const near = sketchOf(shot({ aim: [-1.0, 0] })).sketch!;
+    const far = sketchOf(shot({ aim: [-2.0, 0] })).sketch!;
+    expect(near.extent).toBeLessThan(far.extent); // closer miss → tighter frame → bigger head
+    expect(near.extent).toBeLessThan(3);
+    for (const sk of [near, far]) {
+      const xHalf = sk.extent * 0.16; // renderer X half-size
+      expect(Math.hypot(sk.bullet.x, sk.bullet.y) + xHalf).toBeLessThanOrEqual(sk.extent);
+      expect(sk.extent).toBeGreaterThan(1); // head circle never cropped
+    }
+  });
+
+  test("grazing miss: tightest frame, head fills ~70% of the drawing", async () => {
+    const { MIN_EXTENT } = await import("../src/feedback/ImpactSketch");
+    const graze = sketchOf(shot({ aim: [-0.62, 0] })).sketch!; // just outside the valid region
+    expect(graze.extent).toBe(MIN_EXTENT);
+    expect(1 / graze.extent).toBeGreaterThan(0.7);
+  });
+
+  test("zoom never moves a point: bullet offset is the same geometry at any frame", () => {
+    const r = sketchOf(shot({ aim: [-1.0, 0.3] }));
+    expect(r.sketch!.bullet).toEqual(r.offset!);
   });
 });

@@ -41,6 +41,7 @@ export class ShotEchoRenderer {
   private skArrow: SVGLineElement;
   private skAim: SVGPathElement;
   private skBullet: SVGPathElement;
+  private skMarker: SVGMarkerElement;
   private ghostTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
   private textTimer: ReturnType<typeof setTimeout> | null = null;
@@ -64,11 +65,11 @@ export class ShotEchoRenderer {
     this.sketch.innerHTML =
       `<defs><marker id="echo-sk-arrow" viewBox="0 0 8 8" refX="6.5" refY="4" markerUnits="userSpaceOnUse" markerWidth="0.55" markerHeight="0.55" orient="auto">` +
       `<path d="M0,0 L8,4 L0,8 Z" class="sk-arrowhead"/></marker></defs>`;
+    this.skMarker = this.sketch.querySelector("marker") as SVGMarkerElement;
     this.skValid = svgEl("circle", "sk-valid");
     this.skHead = svgEl("circle", "sk-head");
     this.skHead.setAttribute("r", "1");
     this.skCenter = svgEl("circle", "sk-center");
-    this.skCenter.setAttribute("r", "0.13");
     this.skArrow = svgEl("line", "sk-arrow");
     this.skArrow.setAttribute("marker-end", "url(#echo-sk-arrow)");
     this.skAim = svgEl("path", "sk-aim");
@@ -188,17 +189,21 @@ export class ShotEchoRenderer {
     this.sketch.setAttribute("height", String(size));
     this.sketch.setAttribute("viewBox", `${-e} ${-e} ${2 * e} ${2 * e}`);
     this.skValid.setAttribute("r", sk.inset.toFixed(3));
+    // glyphs scale with the frame, so X / + / dot / arrowhead read the same at any zoom
+    this.skCenter.setAttribute("r", (e * 0.045).toFixed(3));
+    this.skMarker.setAttribute("markerWidth", (e * 0.2).toFixed(3));
+    this.skMarker.setAttribute("markerHeight", (e * 0.2).toFixed(3));
     this.skCenter.style.display = this.cfg.impactSketchShowCenter ? "" : "none";
 
     const P = (p: SketchPoint): [number, number] => [p.x, -p.y]; // y up → SVG y down
     const [bx, by] = P(sk.bullet);
-    const k = 0.34;
+    const k = e * 0.16; // X half-size
     this.skBullet.setAttribute("d", `M${bx - k},${by - k}L${bx + k},${by + k}M${bx - k},${by + k}L${bx + k},${by - k}`);
     this.skBullet.setAttribute("class", `sk-bullet${sk.bulletClamped ? " sk-clamped" : ""}`);
 
     if (sk.aim) {
       const [ax, ay] = P(sk.aim);
-      const a = 0.3;
+      const a = e * 0.13;
       this.skAim.setAttribute("d", `M${ax - a},${ay}L${ax + a},${ay}M${ax},${ay - a}L${ax},${ay + a}`);
       this.skAim.style.display = "";
     } else {

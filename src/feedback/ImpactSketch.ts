@@ -13,7 +13,11 @@ export interface SketchPoint { x: number; y: number }
  */
 export interface ImpactSketch {
   kind: EchoKind;
-  /** Head radii from the sketch centre to its edge (drawing scale). */
+  /**
+   * Head radii from the sketch centre to its edge. ADAPTIVE framing: zoomed
+   * so the head and the X fill the drawing (near miss → big head), up to
+   * MAX_EXTENT for far misses. Positions are never moved — only the frame.
+   */
   extent: number;
   /** Valid headshot region radius (validRegionInset), in head radii. */
   inset: number;
@@ -37,8 +41,15 @@ export interface ImpactSketchResult {
   offset: SketchPoint | null;
 }
 
-const EXTENT = 3; // show ±3 head radii: enough for near misses, compact enough to read at a glance
-const RIM = EXTENT * 0.9;
+const MAX_EXTENT = 3; // widest frame: ±3 head radii (beyond → pinned to the rim, direction kept)
+export const MIN_EXTENT = 1.4; // tightest frame: the head fills ~70% of the drawing
+const RIM = MAX_EXTENT * 0.84; // pinned X (half-size 0.16 × frame) still fits inside the frame
+
+/** Tightest frame that still shows the head, every marker and room for the X glyph. */
+export function frameExtent(points: SketchPoint[]): number {
+  const reach = Math.max(1, ...points.map((p) => Math.hypot(p.x, p.y)));
+  return Math.min(MAX_EXTENT, Math.max(MIN_EXTENT, reach * 1.18 + 0.2));
+}
 
 export function buildImpactSketch(s: ShotSnapshot, a: ShotAnalysis, cfg: ShotEchoConfig): ImpactSketchResult {
   if (!cfg.enabled || !cfg.impactSketchEnabled) return { sketch: null, suppressed: "disabled", offset: null };
@@ -71,7 +82,8 @@ export function buildImpactSketch(s: ShotSnapshot, a: ShotAnalysis, cfg: ShotEch
   }
   return {
     sketch: {
-      kind: a.kind, extent: EXTENT, inset: cfg.validRegionInset, bullet, bulletClamped, aim,
+      kind: a.kind, extent: frameExtent([bullet, ...(aim ? [aim] : []), ...(arrowTo ? [arrowTo] : [])]),
+      inset: cfg.validRegionInset, bullet, bulletClamped, aim,
       arrowFrom: arrowTo ? (aimRel ? clampPoint(aimRel) : bullet) : null, arrowTo,
     },
     suppressed: null,
