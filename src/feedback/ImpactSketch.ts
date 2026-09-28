@@ -43,7 +43,9 @@ export interface ImpactSketchResult {
 
 const MAX_EXTENT = 3; // widest frame: ±3 head radii (beyond → pinned to the rim, direction kept)
 export const MIN_EXTENT = 1.4; // tightest frame: the head fills ~70% of the drawing
-const RIM = MAX_EXTENT * 0.84; // pinned X (half-size 0.16 × frame) still fits inside the frame
+/** X glyph half-size as a fraction of the frame (renderer + fit rules share it). */
+export const X_HALF = 0.136;
+const RIM = MAX_EXTENT * 0.84; // a pinned X (half-size X_HALF × frame) still fits inside the frame
 
 /** Tightest frame that still shows the head, every marker and room for the X glyph. */
 export function frameExtent(points: SketchPoint[]): number {

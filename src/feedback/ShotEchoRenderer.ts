@@ -1,7 +1,7 @@
 import type { ShotEchoConfig } from "../config/shotEchoConfig.js";
 import { applyEchoSlot, echoTextTimeline, type EchoSlot } from "./EchoDisplayPolicy.js";
 import type { EchoCopy } from "./EchoCopy.js";
-import { sketchSizeFor, type ImpactSketch, type SketchPoint } from "./ImpactSketch.js";
+import { sketchSizeFor, X_HALF, type ImpactSketch, type SketchPoint } from "./ImpactSketch.js";
 import type { EchoFeedback } from "./ShotEcho.js";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -197,7 +197,7 @@ export class ShotEchoRenderer {
 
     const P = (p: SketchPoint): [number, number] => [p.x, -p.y]; // y up → SVG y down
     const [bx, by] = P(sk.bullet);
-    const k = e * 0.16; // X half-size
+    const k = e * X_HALF;
     this.skBullet.setAttribute("d", `M${bx - k},${by - k}L${bx + k},${by + k}M${bx - k},${by + k}L${bx + k},${by - k}`);
     this.skBullet.setAttribute("class", `sk-bullet${sk.bulletClamped ? " sk-clamped" : ""}`);
 

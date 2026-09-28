@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { shotEchoConfig, type ShotEchoConfig } from "../src/config/shotEchoConfig";
 import type { ShotSnapshot, TargetSample, Vec3 } from "../src/combat/ShotSnapshot";
 import { applyEchoSlot, echoSlotAt, echoTextTimeline, type EchoSlot } from "../src/feedback/EchoDisplayPolicy";
-import { buildImpactSketch } from "../src/feedback/ImpactSketch";
+import { buildImpactSketch, X_HALF } from "../src/feedback/ImpactSketch";
 import { analyzeShot } from "../src/feedback/ShotAnalyzer";
 import { ShotEcho } from "../src/feedback/ShotEcho";
 
@@ -175,7 +175,7 @@ describe("Impact Sketch framing: the head and the X are the focus", () => {
     expect(near.extent).toBeLessThan(far.extent); // closer miss → tighter frame → bigger head
     expect(near.extent).toBeLessThan(3);
     for (const sk of [near, far]) {
-      const xHalf = sk.extent * 0.16; // renderer X half-size
+      const xHalf = sk.extent * X_HALF; // renderer X half-size
       expect(Math.hypot(sk.bullet.x, sk.bullet.y) + xHalf).toBeLessThanOrEqual(sk.extent);
       expect(sk.extent).toBeGreaterThan(1); // head circle never cropped
     }
