@@ -2,8 +2,11 @@
 
 export interface ShotEchoConfig {
   enabled: boolean;
-  feedbackDurationMs: number; // correction text on screen
-  ghostReticleDurationMs: number; // ghost reticle (echo of the analysed instant)
+  feedbackDurationMs: number; // correction text, total time on screen (fade included)
+  feedbackFadeMs: number; // smooth exit at the END of feedbackDurationMs
+  /** A visible CORRECTED is not replaced by a lower-priority message for this long. */
+  correctedPriorityMs: number;
+  ghostReticleDurationMs: number; // ghost reticle (echo of the analysed instant) — short, never blocks aim
   maximumAnalysisAngleDeg: number; // a miss further than this from any head gets no directional feedback
   correctionRecognitionWindowMs: number; // CORRECTED only if the fixing headshot lands within this window
   /**
@@ -15,7 +18,9 @@ export interface ShotEchoConfig {
 
 export const shotEchoConfig: ShotEchoConfig = {
   enabled: true,
-  feedbackDurationMs: 750,
+  feedbackDurationMs: 1500,
+  feedbackFadeMs: 250,
+  correctedPriorityMs: 700,
   ghostReticleDurationMs: 250,
   maximumAnalysisAngleDeg: 4,
   correctionRecognitionWindowMs: 3000,

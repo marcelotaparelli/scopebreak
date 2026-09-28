@@ -1,4 +1,5 @@
 import type { ShotEchoConfig } from "../config/shotEchoConfig.js";
+import { decideEchoText, echoTextTimeline, type ShownEcho } from "./EchoDisplayPolicy.js";
 import type { EchoFeedback } from "./ShotEcho.js";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -20,7 +21,10 @@ export class ShotEchoRenderer {
   private title: HTMLElement;
   private detail: HTMLElement;
   private ghostTimer: ReturnType<typeof setTimeout> | null = null;
+  private fadeTimer: ReturnType<typeof setTimeout> | null = null;
   private textTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The one message currently on screen (single slot, never stacked). */
+  private shown: ShownEcho | null = null;
 
   constructor(parent: HTMLElement, private cfg: ShotEchoConfig) {
     this.root = document.createElement("div");
@@ -54,15 +58,11 @@ export class ShotEchoRenderer {
     parent.appendChild(this.root);
   }
 
-  show(fb: EchoFeedback, fovDeg: number): void {
+  show(fb: EchoFeedback, fovDeg: number, nowMs: number): void {
+    const action = decideEchoText(this.shown, fb, nowMs, this.cfg);
+    if (action === "replace") this.showText(fb, nowMs);
+    else if (action === "clear") this.hideText();
     if (!fb.visible) return;
-    this.text.className = `echo-text tone-${fb.tone} on`;
-    this.glyph.textContent = fb.glyph;
-    this.title.textContent = fb.title;
-    this.detail.textContent = fb.detail;
-    this.restart(this.text);
-    if (this.textTimer) clearTimeout(this.textTimer);
-    this.textTimer = setTimeout(() => this.text.classList.remove("on"), this.cfg.feedbackDurationMs);
 
     const g = fb.analysis.ghost;
     if (!fb.showGhost || !g) {
@@ -97,8 +97,36 @@ export class ShotEchoRenderer {
   }
 
   hide(): void {
-    this.text.classList.remove("on");
+    this.hideText();
     this.svg.classList.remove("on");
+  }
+
+  /** Full opacity for holdMs, then a smooth fade that ends at feedbackDurationMs. */
+  private showText(fb: EchoFeedback, nowMs: number): void {
+    const tl = echoTextTimeline(this.cfg);
+    this.clearTextTimers();
+    this.text.style.setProperty("--echo-fade", `${tl.fadeMs}ms`);
+    this.text.className = `echo-text tone-${fb.tone} on`;
+    this.glyph.textContent = fb.glyph;
+    this.title.textContent = fb.title;
+    this.detail.textContent = fb.detail;
+    this.restart(this.text);
+    this.shown = { corrected: fb.corrected, shownAtMs: nowMs };
+    this.fadeTimer = setTimeout(() => this.text.classList.add("fading"), tl.holdMs);
+    this.textTimer = setTimeout(() => this.hideText(), tl.totalMs);
+  }
+
+  private hideText(): void {
+    this.clearTextTimers();
+    this.text.classList.remove("on", "fading", "pop");
+    this.shown = null;
+  }
+
+  private clearTextTimers(): void {
+    if (this.fadeTimer) clearTimeout(this.fadeTimer);
+    if (this.textTimer) clearTimeout(this.textTimer);
+    this.fadeTimer = null;
+    this.textTimer = null;
   }
 
   /** Re-trigger the pop-in transition on an already-visible node. */

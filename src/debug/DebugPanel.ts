@@ -153,7 +153,9 @@ export class DebugPanel {
     const e = this.section("SHOT ECHO (training)");
     const ec = shotEchoConfig;
     this.bool(e, "enabled", () => ec.enabled, (v) => (ec.enabled = v));
-    this.num(e, "feedbackMs", () => ec.feedbackDurationMs, (v) => (ec.feedbackDurationMs = v), 100, 3000, 50);
+    this.num(e, "feedbackMs", () => ec.feedbackDurationMs, (v) => (ec.feedbackDurationMs = v), 250, 5000, 50);
+    this.num(e, "fadeMs", () => ec.feedbackFadeMs, (v) => (ec.feedbackFadeMs = v), 0, 1000, 10);
+    this.num(e, "correctedPriorityMs", () => ec.correctedPriorityMs, (v) => (ec.correctedPriorityMs = v), 0, 3000, 50);
     this.num(e, "ghostMs", () => ec.ghostReticleDurationMs, (v) => (ec.ghostReticleDurationMs = v), 50, 1500, 10);
     this.num(e, "maxAngle°", () => ec.maximumAnalysisAngleDeg, (v) => (ec.maximumAnalysisAngleDeg = v), 0.5, 15, 0.5);
     this.num(e, "correctWindowMs", () => ec.correctionRecognitionWindowMs, (v) => (ec.correctionRecognitionWindowMs = v), 500, 10000, 100);

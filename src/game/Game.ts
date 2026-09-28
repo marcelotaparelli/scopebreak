@@ -538,7 +538,7 @@ export class Game {
   private presentShotEcho(s: ShotSnapshot): void {
     const fb = this.shotEcho.onShot(s);
     if (!fb) return;
-    this.echoFx.show(fb, s.fovDeg);
+    this.echoFx.show(fb, s.fovDeg, s.timeMs);
     if (fb.sound === "tick") this.combatFx.echoTick();
     else if (fb.sound === "corrected") this.combatFx.echoCorrected();
     const a = fb.analysis;
