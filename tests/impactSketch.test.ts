@@ -158,3 +158,12 @@ describe("Impact Sketch lives in the feedback plate", () => {
     expect(corrected.sound).toBe("corrected");
   });
 });
+
+describe("Impact Sketch size follows the text", () => {
+  test("square side = measured height of the whole text column (floor only for tiny text)", async () => {
+    const { sketchSizeFor } = await import("../src/feedback/ImpactSketch");
+    expect(sketchSizeFor(96.4, CFG)).toBe(96); // header + value + direction + 2 lines
+    expect(sketchSizeFor(131, CFG)).toBe(131); // taller text → taller sketch
+    expect(sketchSizeFor(20, CFG)).toBe(CFG.impactSketchMinSize);
+  });
+});

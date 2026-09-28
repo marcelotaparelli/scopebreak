@@ -15,7 +15,7 @@ export interface ShotEchoConfig {
    */
   validRegionInset: number;
   impactSketchEnabled: boolean; // mini diagram: where the bullet passed vs the head
-  impactSketchSize: number; // px
+  impactSketchMinSize: number; // px floor — the sketch is as tall as the whole text column
   impactSketchShowArrow: boolean;
   impactSketchShowCenter: boolean;
 }
@@ -30,7 +30,7 @@ export const shotEchoConfig: ShotEchoConfig = {
   correctionRecognitionWindowMs: 3000,
   validRegionInset: 0.75,
   impactSketchEnabled: true,
-  impactSketchSize: 104,
+  impactSketchMinSize: 64,
   impactSketchShowArrow: true,
   impactSketchShowCenter: true,
 };

@@ -1,7 +1,7 @@
 import type { ShotEchoConfig } from "../config/shotEchoConfig.js";
 import { applyEchoSlot, echoTextTimeline, type EchoSlot } from "./EchoDisplayPolicy.js";
 import type { EchoCopy } from "./EchoCopy.js";
-import type { ImpactSketch, SketchPoint } from "./ImpactSketch.js";
+import { sketchSizeFor, type ImpactSketch, type SketchPoint } from "./ImpactSketch.js";
 import type { EchoFeedback } from "./ShotEcho.js";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -31,6 +31,7 @@ export class ShotEchoRenderer {
   private glyph: HTMLElement;
   private value: HTMLElement;
   private dir: HTMLElement;
+  private right: HTMLElement;
   private desc: HTMLElement[];
   // Impact Sketch nodes (head-radius units, y up → drawn with y flipped)
   private sketch: SVGSVGElement;
@@ -91,11 +92,13 @@ export class ShotEchoRenderer {
     this.desc = [div("echo-desc"), div("echo-desc")];
     const main = div("echo-main");
     main.append(this.glyph, this.value);
+    // header lives in the text column so the sketch spans ALL the text
     const right = div("echo-right");
-    right.append(main, this.dir, ...this.desc);
+    right.append(this.head, main, this.dir, ...this.desc);
+    this.right = right;
     const body = div("echo-body");
     body.append(this.sketch, right);
-    this.text.append(this.head, body);
+    this.text.append(body);
     this.root.append(this.svg, this.text);
     parent.appendChild(this.root);
   }
@@ -177,7 +180,8 @@ export class ShotEchoRenderer {
       this.sketch.style.display = "none";
       return;
     }
-    const size = this.cfg.impactSketchSize;
+    // text is already filled: match its real rendered height (any font / line count)
+    const size = sketchSizeFor(this.right.offsetHeight, this.cfg);
     const e = sk.extent;
     this.sketch.style.display = "";
     this.sketch.setAttribute("width", String(size));

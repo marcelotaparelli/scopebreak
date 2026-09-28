@@ -136,7 +136,7 @@ canvas { display: block; }
 #shot-echo .echo-text.on { opacity: 1; transition: none; }
 #shot-echo .echo-text.on.fading { opacity: 0; transition: opacity var(--echo-fade, 250ms) ease-in; }
 #shot-echo .echo-text.pop { animation: echo-pop 120ms ease-out; }
-#shot-echo .echo-head { font-size: 9px; font-weight: 700; letter-spacing: 3px; color: rgba(183, 195, 214, 0.55); margin-bottom: 4px; }
+#shot-echo .echo-head { font-size: 9px; font-weight: 700; letter-spacing: 3px; color: rgba(183, 195, 214, 0.55); margin-bottom: 5px; }
 #shot-echo .echo-body { display: flex; align-items: center; gap: 14px; }
 #shot-echo .echo-text:not(.has-sketch) .echo-body { justify-content: center; }
 #shot-echo .echo-text:not(.has-sketch) .echo-right { text-align: center; }

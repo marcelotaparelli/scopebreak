@@ -79,6 +79,11 @@ export function buildImpactSketch(s: ShotSnapshot, a: ShotAnalysis, cfg: ShotEch
   };
 }
 
+/** Square sketch side: exactly the measured height of the text column, never below the floor. */
+export function sketchSizeFor(textColumnHeightPx: number, cfg: ShotEchoConfig): number {
+  return Math.max(cfg.impactSketchMinSize, Math.round(textColumnHeightPx));
+}
+
 function clampPoint(p: SketchPoint): SketchPoint {
   const d = Math.hypot(p.x, p.y);
   return d > RIM ? { x: (p.x / d) * RIM, y: (p.y / d) * RIM } : p;
