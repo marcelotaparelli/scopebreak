@@ -835,7 +835,7 @@ export class Game {
       `<div class="stat"><span>pendingQS</span><b>${this.pendingQuickLmbMs >= 0}</b></div>` +
       `<div class="stat"><span>precision</span><b>${precise}</b></div>` +
       `<div class="stat"><span>speed</span><b>${this.move.horizontalSpeed().toFixed(2)} m/s</b></div>` +
-      `<div class="stat"><span>slide dir/wish/Δ</span><b>${this.move.sliding ? `${(Math.atan2(this.move.body.vx, -this.move.body.vz) * 180 / Math.PI).toFixed(0)}° / ${Number.isNaN(this.move.slideWishDeg) ? "—" : this.move.slideWishDeg.toFixed(0) + "°"} / ${this.move.slideSteerDiffDeg.toFixed(0)}°` : "—"}</b></div>` +
+      `<div class="stat"><span>steer dir/wish/Δ/turn</span><b>${this.move.sliding || !this.move.body.grounded ? `${(Math.atan2(this.move.body.vx, -this.move.body.vz) * 180 / Math.PI).toFixed(0)}° / ${Number.isNaN(this.move.steerWishDeg) ? "—" : this.move.steerWishDeg.toFixed(0) + "°"} / ${this.move.steerDiffDeg.toFixed(0)}° / ${this.move.steerTurnDeg.toFixed(1)}°` : "—"}</b></div>` +
       `<div class="stat"><span>slideEntry</span><b>${this.move.lastSlideEntrySpeed.toFixed(1)}→${this.move.lastSlideBoostedSpeed.toFixed(1)}</b></div>` +
       `<div class="stat"><span>land</span><b>${this.move.lastLandSpeedIn.toFixed(1)}→${this.move.lastLandSpeedOut.toFixed(1)}</b></div>` +
       `<div class="stat"><span>slideStarted</span><b>${this.move.events.justStartedSlide}</b></div>` +

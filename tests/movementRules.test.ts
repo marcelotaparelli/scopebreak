@@ -50,26 +50,41 @@ describe("momentum preservation", () => {
 });
 
 describe("air control limits", () => {
-  test("cannot instantly reverse", () => {
-    const r = airControlStep(10, 0, -1, 0, 32, 0.85, 16, 9, 1 / 60);
+  const DEG = Math.PI / 180;
+  // turn 450°/s, opposite 150°, accel 27.2, air ceiling 16, run 9, dt 1/60
+  const step = (vx: number, vz: number, wx: number, wz: number) =>
+    airControlStep(vx, vz, wx, wz, 450 * DEG / 60, 150 * DEG, 27.2, 16, 9, 1 / 60);
+
+  test("cannot instantly reverse: opposite wish brakes, never rotates", () => {
+    const r = step(10, 0, -1, 0);
+    expect(r.vz).toBe(0);
     expect(r.vx).toBeGreaterThan(9);
+    expect(r.vx).toBeLessThan(10);
   });
-  test("curves gradually and respects speed cap", () => {
+
+  test("turns fast at the rate limit, magnitude kept, never overshoots", () => {
     let { vx, vz } = { vx: 10, vz: 0 };
-    let earlyVx = 0;
+    const r1 = step(vx, vz, 0, 1); // wish 90° away
+    expect(Math.atan2(r1.vz, r1.vx) / DEG).toBeCloseTo(7.5, 9); // first tick: full rate
+    expect(Math.hypot(r1.vx, r1.vz)).toBeCloseTo(10, 9);
     let peak = 0;
     for (let i = 0; i < 60; i++) {
-      const r = airControlStep(vx, vz, 0, 1, 32, 0.85, 16, 9, 1 / 60);
+      const r = step(vx, vz, 0, 1);
       vx = r.vx; vz = r.vz;
-      if (i === 14) earlyVx = vx;
       peak = Math.max(peak, Math.hypot(vx, vz));
     }
-    // after 0.25s the turn has barely started (no instant 180s)
-    expect(earlyVx).toBeGreaterThan(8);
-    // lateral curve builds up
-    expect(vz).toBeGreaterThan(3);
-    // speed never explodes past the cap
-    expect(peak).toBeLessThanOrEqual(16.001);
+    expect(vx).toBeCloseTo(0, 9); // aligned with wish after 90/450 s, no overshoot
+    expect(vz).toBeCloseTo(10, 9);
+    expect(peak).toBeLessThanOrEqual(10 + 1e-9); // steering alone never adds speed
+  });
+
+  test("input builds speed only up to run speed; excess above ceiling decays", () => {
+    const r0 = step(0, 0, 1, 0);
+    expect(r0.vx).toBeCloseTo(27.2 / 60, 9);
+    const slow = step(5, 0, 1, 0);
+    expect(slow.vx).toBeGreaterThan(5);
+    expect(step(12, 0, 1, 0).vx).toBe(12); // W above run speed adds nothing
+    expect(step(20, 0, 1, 0).vx).toBeLessThan(20);
   });
 });
 

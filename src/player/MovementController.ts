@@ -53,9 +53,10 @@ export class MovementController {
   /** Last touchdown (debug): horizontal speed right before → right after landing. */
   lastLandSpeedIn = 0;
   lastLandSpeedOut = 0;
-  /** Slide steering (debug): wish heading and signed angle velocity→wish, degrees. */
-  slideWishDeg = NaN;
-  slideSteerDiffDeg = 0;
+  /** Slide/air steering (debug): wish heading, signed angle velocity→wish, turn applied this tick (deg). */
+  steerWishDeg = NaN;
+  steerDiffDeg = 0;
+  steerTurnDeg = 0;
   /**
    * One Shift press = at most one slide entry. Armed on the keydown edge,
    * consumed by the entry it produces; holding Shift never re-arms it.
@@ -129,10 +130,13 @@ export class MovementController {
           // steer: rotate the real velocity toward camera+WASD at a capped
           // turn rate (never snaps, never rebuilt from the camera)
           const r = hasInput
-            ? slideSteerStep(b.vx, b.vz, wishX, wishZ, cfg.slideTurnRateDeg * DEG * dt, cfg.slideSteerOppositeDeg * DEG)
+            ? slideSteerStep(b.vx, b.vz, wishX, wishZ, cfg.slideTurnRateDeg * DEG * dt, cfg.steerOppositeDeg * DEG)
             : { vx: b.vx, vz: b.vz, diffRad: 0 };
-          this.slideSteerDiffDeg = r.diffRad / DEG;
-          this.slideWishDeg = hasInput ? Math.atan2(wishX, -wishZ) / DEG : NaN;
+          this.steerDiffDeg = r.diffRad / DEG;
+          this.steerTurnDeg = !hasInput || Math.abs(this.steerDiffDeg) > cfg.steerOppositeDeg
+            ? 0
+            : Math.max(-cfg.slideTurnRateDeg * dt, Math.min(cfg.slideTurnRateDeg * dt, this.steerDiffDeg));
+          this.steerWishDeg = hasInput ? Math.atan2(wishX, -wishZ) / DEG : NaN;
           b.vx = (r.vx / sp) * decayed;
           b.vz = (r.vz / sp) * decayed;
         }
@@ -213,15 +217,26 @@ export class MovementController {
         }
       }
     } else {
-      // --- AIRBORNE: gradual air strafe, no hard cap abuse ---
-      // NOTE: excess air speed is never snapped to runSpeed — airControlStep
-      // only decays it gently toward maxAirSpeed, so slide-jump momentum survives.
+      // --- AIRBORNE: fast rate-limited air strafe (camera + WASD) ---
+      // Rotates the carried velocity; never rebuilt from runSpeed, so
+      // slide-jump momentum survives. No WASD → camera is free to aim.
       b.height = cfg.standingHeight;
       if (this.sliding) this.endSlide(colliders);
       if (hasInput) {
-        const r = airControlStep(b.vx, b.vz, wishX, wishZ, cfg.airAcceleration, cfg.airControl, cfg.maxAirSpeed, topSpeed, dt);
+        const r = airControlStep(
+          b.vx, b.vz, wishX, wishZ,
+          cfg.airTurnRateDeg * DEG * dt, cfg.steerOppositeDeg * DEG,
+          cfg.airAcceleration * cfg.airControl, cfg.maxAirSpeed, topSpeed, dt,
+        );
         b.vx = r.vx;
         b.vz = r.vz;
+        this.steerDiffDeg = r.diffRad / DEG;
+        this.steerTurnDeg = r.turnRad / DEG;
+        this.steerWishDeg = Math.atan2(wishX, -wishZ) / DEG;
+      } else {
+        this.steerDiffDeg = 0;
+        this.steerTurnDeg = 0;
+        this.steerWishDeg = NaN;
       }
       // wall kick
       if (input.jumpPressed) {

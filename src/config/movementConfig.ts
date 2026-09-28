@@ -13,11 +13,12 @@ export interface MovementConfig {
   airAcceleration: number;
   airControl: number; // 0..1 fraction of wish applied per second curve
   maxAirSpeed: number; // soft cap for added air velocity
+  airTurnRateDeg: number; // max air direction change toward camera+WASD, deg/s (magnitude kept)
   // slide
   minimumSlideSpeed: number;
   slideFriction: number;
   slideTurnRateDeg: number; // max slide direction change toward camera+WASD, deg/s (magnitude kept)
-  slideSteerOppositeDeg: number; // wish further than this from velocity (e.g. S) does not steer
+  steerOppositeDeg: number; // slide + air: wish further than this from velocity (e.g. S) does not rotate
   slideBoostTargetSpeed: number; // slide entry pulls speed toward this (never pulls down); above it = preserve
   slideBoostStrength: number; // 0..1 fraction of the gap to the target added on entry (diminishing returns)
   momentumRetention: number; // fraction of horizontal speed kept on slide exit
@@ -60,11 +61,12 @@ export const movementConfig: MovementConfig = {
   airAcceleration: 32,
   airControl: 0.85,
   maxAirSpeed: 18,
+  airTurnRateDeg: 450,
 
   minimumSlideSpeed: 3.5,
   slideFriction: 0.4,
   slideTurnRateDeg: 220,
-  slideSteerOppositeDeg: 150,
+  steerOppositeDeg: 150,
   slideBoostTargetSpeed: 17.0,
   slideBoostStrength: 0.75,
   momentumRetention: 0.92,

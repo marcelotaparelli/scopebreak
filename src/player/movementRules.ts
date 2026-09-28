@@ -74,45 +74,57 @@ export function slideJumpVelocity(
 }
 
 /**
- * Gradual air control: steer current horizontal velocity toward wish dir
- * without allowing instant 180s. Returns new horizontal speed vector (x,z).
+ * Air strafe: DIRECTION and MAGNITUDE are handled separately, so turning
+ * responds on the first tick at any speed (the old add-a-vector-and-clamp
+ * model turned at accel/speed rad/s — ~100°/s at 15 m/s — and bled speed
+ * whenever the wish was > 90° from the velocity).
  *
- * ENERGY RULE: air input may build speed only up to `wishSpeed` (run speed).
- * Above that it is pure steering — magnitude never grows beyond what the
- * player carried into the air (slide/jump momentum), and excess above
- * `maxAirSpeed` decays gently. Holding W mid-air is NOT an accelerator
- * (it used to add ~27 m/s² up to maxAirSpeed, so every jump landed at 18).
+ * 1. DIRECTION: rotate the real velocity toward the wish (camera + WASD) by
+ *    at most `maxTurnRad`; a wish further than `oppositeRad` (S / reversal)
+ *    does not rotate. Pure rotation: no energy created or lost.
+ * 2. MAGNITUDE (`accel` = airAcceleration × airControl):
+ *    - wish ahead: builds speed only up to `wishSpeed` (run speed) — W is
+ *      never an air accelerator above run speed;
+ *    - wish behind (> 90° after turning): the opposing part brakes — a
+ *      reversal costs speed and time;
+ *    - excess above `maxAirSpeed` decays gently.
+ * No WASD → the caller skips this: the camera is free to aim.
  */
 export function airControlStep(
   vx: number,
   vz: number,
   wishX: number,
   wishZ: number,
-  airAcceleration: number,
-  airControl: number,
+  maxTurnRad: number,
+  oppositeRad: number,
+  accel: number,
   maxAirSpeed: number,
   wishSpeed: number,
   dt: number,
-): { vx: number; vz: number } {
+): { vx: number; vz: number; diffRad: number; turnRad: number } {
   const wishLen = Math.hypot(wishX, wishZ);
-  if (wishLen < 1e-6) return { vx, vz };
+  if (wishLen < 1e-6) return { vx, vz, diffRad: 0, turnRad: 0 };
   const nx = wishX / wishLen;
   const nz = wishZ / wishLen;
-  const oldSpeed = Math.hypot(vx, vz);
-  const add = airAcceleration * airControl * dt;
-  let nvx = vx + nx * add;
-  let nvz = vz + nz * add;
-  // carried momentum is kept (decaying only above the air ceiling);
-  // input alone can never push past wishSpeed
-  const carried = Math.min(oldSpeed, Math.max(maxAirSpeed, oldSpeed - oldSpeed * 0.35 * dt));
-  const allowed = Math.max(wishSpeed, carried);
-  const sp = Math.hypot(nvx, nvz);
-  if (sp > allowed) {
-    const s = allowed / sp;
-    nvx *= s;
-    nvz *= s;
+  const add = accel * dt;
+  const sp = Math.hypot(vx, vz);
+  if (sp < 1e-4) {
+    // standing jump: input builds speed from zero along the wish
+    const s = Math.min(add, wishSpeed);
+    return { vx: nx * s, vz: nz * s, diffRad: 0, turnRad: 0 };
   }
-  return { vx: nvx, vz: nvz };
+  const diff = Math.atan2(vx * nz - vz * nx, vx * nx + vz * nz);
+  const turn = Math.abs(diff) > oppositeRad ? 0 : Math.max(-maxTurnRad, Math.min(maxTurnRad, diff));
+  const c = Math.cos(turn);
+  const s = Math.sin(turn);
+  const dx = (vx * c - vz * s) / sp;
+  const dz = (vx * s + vz * c) / sp;
+  const align = Math.cos(diff - turn);
+  let newSp = sp;
+  if (align > 0 && sp < wishSpeed) newSp = Math.min(wishSpeed, sp + add * align);
+  else if (align < 0) newSp = Math.max(0, sp + add * align);
+  if (newSp > maxAirSpeed) newSp = Math.max(maxAirSpeed, newSp - newSp * 0.35 * dt);
+  return { vx: dx * newSp, vz: dz * newSp, diffRad: diff, turnRad: turn };
 }
 
 /**

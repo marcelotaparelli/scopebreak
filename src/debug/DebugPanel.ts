@@ -90,6 +90,7 @@ export class DebugPanel {
     const a = this.section("AIR");
     this.num(a, "airAccel", () => mc().airAcceleration, (v) => (mc().airAcceleration = v), 5, 80, 1);
     this.num(a, "airControl", () => mc().airControl, (v) => (mc().airControl = v), 0, 1.5, 0.05);
+    this.num(a, "airTurnRate°/s", () => mc().airTurnRateDeg, (v) => (mc().airTurnRateDeg = v), 0, 1080, 10);
     this.num(a, "maxAirSpeed", () => mc().maxAirSpeed, (v) => (mc().maxAirSpeed = v), 8, 26, 0.5);
 
     const s = this.section("SLIDE");
