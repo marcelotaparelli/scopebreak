@@ -14,6 +14,10 @@ export interface ShotEchoConfig {
    * radius), so following the advice lands a clean hit, not a mesh graze.
    */
   validRegionInset: number;
+  impactSketchEnabled: boolean; // mini diagram: where the bullet passed vs the head
+  impactSketchSize: number; // px
+  impactSketchShowArrow: boolean;
+  impactSketchShowCenter: boolean;
 }
 
 export const shotEchoConfig: ShotEchoConfig = {
@@ -25,4 +29,8 @@ export const shotEchoConfig: ShotEchoConfig = {
   maximumAnalysisAngleDeg: 4,
   correctionRecognitionWindowMs: 3000,
   validRegionInset: 0.75,
+  impactSketchEnabled: true,
+  impactSketchSize: 72,
+  impactSketchShowArrow: true,
+  impactSketchShowCenter: true,
 };

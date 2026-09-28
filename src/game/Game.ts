@@ -13,6 +13,7 @@ import { HitDetection } from "../combat/HitDetection.js";
 import { ShotCapture } from "../combat/ShotCapture.js";
 import type { ShotSnapshot } from "../combat/ShotSnapshot.js";
 import { ShotEcho } from "../feedback/ShotEcho.js";
+import { buildImpactSketch } from "../feedback/ImpactSketch.js";
 import { ShotEchoRenderer } from "../feedback/ShotEchoRenderer.js";
 import { FFAMode } from "../modes/FFAMode.js";
 import { TrainingMode } from "../modes/TrainingMode.js";
@@ -538,7 +539,8 @@ export class Game {
   private presentShotEcho(s: ShotSnapshot): void {
     const fb = this.shotEcho.onShot(s);
     if (!fb) return;
-    this.echoFx.show(fb, s.fovDeg, s.timeMs);
+    const sk = buildImpactSketch(s, fb.analysis, shotEchoConfig);
+    this.echoFx.show(fb, s.fovDeg, s.timeMs, fb.visible ? sk.sketch : null);
     if (fb.sound === "tick") this.combatFx.echoTick();
     else if (fb.sound === "corrected") this.combatFx.echoCorrected();
     const a = fb.analysis;
@@ -554,6 +556,9 @@ export class Game {
       row("target", a.target ? `#${a.target.id} life ${a.target.lifeId}` : "—") +
       row("correction", a.correction ? `h ${a.correction.h.toFixed(2)}° v ${a.correction.v.toFixed(2)}°` : "—") +
       row("class", `${a.kind}${fb.corrected ? " ✓CORRECTED" : ""}`) +
+      row("impact sketch", sk.sketch
+        ? `shown · bullet ${sk.offset!.x.toFixed(2)}, ${sk.offset!.y.toFixed(2)} r${sk.sketch.bulletClamped ? " (off-scale)" : ""}`
+        : `suppressed: ${sk.suppressed}${sk.offset ? ` · bullet ${sk.offset.x.toFixed(2)}, ${sk.offset.y.toFixed(2)} r` : ""}`) +
       row("validity", a.target ? `geometric · aimOnHead ${a.aimOnHead} · shotOnHead ${a.shotOnHead}` : "no valid target") +
       row("totals", `n${st.analyzed} hs${st.headshots} body${st.bodyShots} near${st.nearMisses} H${st.horizontalErrors} V${st.verticalErrors} spr${st.spreadLimited} ads${st.adsEarly} ✓${st.corrected}`),
     );

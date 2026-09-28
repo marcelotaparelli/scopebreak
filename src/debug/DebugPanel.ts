@@ -160,6 +160,10 @@ export class DebugPanel {
     this.num(e, "maxAngle°", () => ec.maximumAnalysisAngleDeg, (v) => (ec.maximumAnalysisAngleDeg = v), 0.5, 15, 0.5);
     this.num(e, "correctWindowMs", () => ec.correctionRecognitionWindowMs, (v) => (ec.correctionRecognitionWindowMs = v), 500, 10000, 100);
     this.num(e, "validInset", () => ec.validRegionInset, (v) => (ec.validRegionInset = v), 0.3, 1, 0.05);
+    this.bool(e, "impactSketch", () => ec.impactSketchEnabled, (v) => (ec.impactSketchEnabled = v));
+    this.num(e, "sketchSize", () => ec.impactSketchSize, (v) => (ec.impactSketchSize = v), 40, 160, 4);
+    this.bool(e, "sketchArrow", () => ec.impactSketchShowArrow, (v) => (ec.impactSketchShowArrow = v));
+    this.bool(e, "sketchCenter", () => ec.impactSketchShowCenter, (v) => (ec.impactSketchShowCenter = v));
     e.appendChild(this.echoEl);
 
     const st = this.section("STATE");

@@ -1,14 +1,23 @@
 import type { ShotEchoConfig } from "../config/shotEchoConfig.js";
-import { decideEchoText, echoTextTimeline, type ShownEcho } from "./EchoDisplayPolicy.js";
+import { applyEchoSlot, echoTextTimeline, type EchoSlot } from "./EchoDisplayPolicy.js";
+import type { ImpactSketch, SketchPoint } from "./ImpactSketch.js";
 import type { EchoFeedback } from "./ShotEcho.js";
 
 const SVG = "http://www.w3.org/2000/svg";
+
+function svgEl<K extends keyof SVGElementTagNameMap>(tag: K, cls: string): SVGElementTagNameMap[K] {
+  const el = document.createElementNS(SVG, tag);
+  el.setAttribute("class", cls);
+  return el;
+}
 
 /**
  * SHOT ECHO presentation. A fixed set of DOM/SVG nodes is built once and
  * reused for every shot (no per-shot node creation, one timer per layer).
  * The ghost reticle is drawn in screen space from the camera AT THE SHOT and
  * never follows targets afterwards: it is an echo of that instant.
+ * The Impact Sketch lives INSIDE the feedback plate (sketch | text), so it
+ * shows, fades and is replaced together with the text by construction.
  */
 export class ShotEchoRenderer {
   private root: HTMLElement;
@@ -20,28 +29,50 @@ export class ShotEchoRenderer {
   private glyph: HTMLElement;
   private title: HTMLElement;
   private detail: HTMLElement;
+  // Impact Sketch nodes (head-radius units, y up → drawn with y flipped)
+  private sketch: SVGSVGElement;
+  private skValid: SVGCircleElement;
+  private skHead: SVGCircleElement;
+  private skCenter: SVGCircleElement;
+  private skArrow: SVGLineElement;
+  private skAim: SVGPathElement;
+  private skBullet: SVGPathElement;
   private ghostTimer: ReturnType<typeof setTimeout> | null = null;
   private fadeTimer: ReturnType<typeof setTimeout> | null = null;
   private textTimer: ReturnType<typeof setTimeout> | null = null;
-  /** The one message currently on screen (single slot, never stacked). */
-  private shown: ShownEcho | null = null;
+  /** The one plate currently on screen (single slot, never stacked). */
+  private slot: EchoSlot | null = null;
 
   constructor(parent: HTMLElement, private cfg: ShotEchoConfig) {
     this.root = document.createElement("div");
     this.root.id = "shot-echo";
-    this.svg = document.createElementNS(SVG, "svg");
-    this.svg.setAttribute("class", "echo-ghost");
+    this.svg = svgEl("svg", "echo-ghost");
     this.svg.innerHTML =
       `<defs><marker id="echo-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">` +
       `<path d="M0,0 L8,4 L0,8 Z" class="echo-arrowhead"/></marker></defs>`;
-    this.ring = document.createElementNS(SVG, "circle");
-    this.ring.setAttribute("class", "echo-ring");
-    this.mark = document.createElementNS(SVG, "path");
-    this.mark.setAttribute("class", "echo-mark");
-    this.fix = document.createElementNS(SVG, "line");
-    this.fix.setAttribute("class", "echo-fix");
+    this.ring = svgEl("circle", "echo-ring");
+    this.mark = svgEl("path", "echo-mark");
+    this.fix = svgEl("line", "echo-fix");
     this.fix.setAttribute("marker-end", "url(#echo-arrow)");
     this.svg.append(this.ring, this.fix, this.mark);
+
+    this.sketch = svgEl("svg", "echo-sketch");
+    this.sketch.innerHTML =
+      `<defs><marker id="echo-sk-arrow" viewBox="0 0 8 8" refX="6.5" refY="4" markerUnits="userSpaceOnUse" markerWidth="0.55" markerHeight="0.55" orient="auto">` +
+      `<path d="M0,0 L8,4 L0,8 Z" class="sk-arrowhead"/></marker></defs>`;
+    this.skValid = svgEl("circle", "sk-valid");
+    this.skHead = svgEl("circle", "sk-head");
+    this.skHead.setAttribute("r", "1");
+    this.skCenter = svgEl("circle", "sk-center");
+    this.skCenter.setAttribute("r", "0.13");
+    this.skArrow = svgEl("line", "sk-arrow");
+    this.skArrow.setAttribute("marker-end", "url(#echo-sk-arrow)");
+    this.skAim = svgEl("path", "sk-aim");
+    this.skBullet = svgEl("path", "sk-bullet");
+    for (const el of [this.skValid, this.skHead, this.skCenter, this.skArrow, this.skAim, this.skBullet]) {
+      el.setAttribute("vector-effect", "non-scaling-stroke");
+      this.sketch.appendChild(el);
+    }
 
     this.text = document.createElement("div");
     this.text.className = "echo-text";
@@ -53,15 +84,19 @@ export class ShotEchoRenderer {
     this.detail.className = "echo-detail";
     const line = document.createElement("div");
     line.append(this.glyph, this.title);
-    this.text.append(line, this.detail);
+    const lines = document.createElement("div");
+    lines.className = "echo-lines";
+    lines.append(line, this.detail);
+    this.text.append(this.sketch, lines);
     this.root.append(this.svg, this.text);
     parent.appendChild(this.root);
   }
 
-  show(fb: EchoFeedback, fovDeg: number, nowMs: number): void {
-    const action = decideEchoText(this.shown, fb, nowMs, this.cfg);
-    if (action === "replace") this.showText(fb, nowMs);
-    else if (action === "clear") this.hideText();
+  show(fb: EchoFeedback, fovDeg: number, nowMs: number, sketch: ImpactSketch | null = null): void {
+    const next = applyEchoSlot(this.slot, fb, sketch !== null, nowMs, this.cfg);
+    if (next.action === "replace") this.showText(fb, sketch);
+    else if (next.action === "clear") this.hideText();
+    this.slot = next.slot;
     if (!fb.visible) return;
 
     const g = fb.analysis.ghost;
@@ -98,28 +133,74 @@ export class ShotEchoRenderer {
 
   hide(): void {
     this.hideText();
+    this.slot = null;
     this.svg.classList.remove("on");
   }
 
-  /** Full opacity for holdMs, then a smooth fade that ends at feedbackDurationMs. */
-  private showText(fb: EchoFeedback, nowMs: number): void {
+  /** Full opacity for holdMs, then a smooth fade that ends at feedbackDurationMs (sketch included). */
+  private showText(fb: EchoFeedback, sketch: ImpactSketch | null): void {
     const tl = echoTextTimeline(this.cfg);
     this.clearTextTimers();
     this.text.style.setProperty("--echo-fade", `${tl.fadeMs}ms`);
-    this.text.className = `echo-text tone-${fb.tone} on`;
+    this.text.className = `echo-text tone-${fb.tone} on${sketch ? " has-sketch" : ""}`;
     this.glyph.textContent = fb.glyph;
     this.title.textContent = fb.title;
     this.detail.textContent = fb.detail;
+    this.drawSketch(sketch);
     this.restart(this.text);
-    this.shown = { corrected: fb.corrected, shownAtMs: nowMs };
     this.fadeTimer = setTimeout(() => this.text.classList.add("fading"), tl.holdMs);
-    this.textTimer = setTimeout(() => this.hideText(), tl.totalMs);
+    this.textTimer = setTimeout(() => {
+      this.hideText();
+      this.slot = null;
+    }, tl.totalMs);
+  }
+
+  /** Redraw the reused sketch nodes; hidden entirely when there is nothing honest to draw. */
+  private drawSketch(sk: ImpactSketch | null): void {
+    if (!sk) {
+      this.sketch.style.display = "none";
+      return;
+    }
+    const size = this.cfg.impactSketchSize;
+    const e = sk.extent;
+    this.sketch.style.display = "";
+    this.sketch.setAttribute("width", String(size));
+    this.sketch.setAttribute("height", String(size));
+    this.sketch.setAttribute("viewBox", `${-e} ${-e} ${2 * e} ${2 * e}`);
+    this.skValid.setAttribute("r", sk.inset.toFixed(3));
+    this.skCenter.style.display = this.cfg.impactSketchShowCenter ? "" : "none";
+
+    const P = (p: SketchPoint): [number, number] => [p.x, -p.y]; // y up → SVG y down
+    const [bx, by] = P(sk.bullet);
+    const k = 0.34;
+    this.skBullet.setAttribute("d", `M${bx - k},${by - k}L${bx + k},${by + k}M${bx - k},${by + k}L${bx + k},${by - k}`);
+    this.skBullet.setAttribute("class", `sk-bullet${sk.bulletClamped ? " sk-clamped" : ""}`);
+
+    if (sk.aim) {
+      const [ax, ay] = P(sk.aim);
+      const a = 0.3;
+      this.skAim.setAttribute("d", `M${ax - a},${ay}L${ax + a},${ay}M${ax},${ay - a}L${ax},${ay + a}`);
+      this.skAim.style.display = "";
+    } else {
+      this.skAim.style.display = "none";
+    }
+
+    if (this.cfg.impactSketchShowArrow && sk.arrowFrom && sk.arrowTo) {
+      const [x1, y1] = P(sk.arrowFrom);
+      const [x2, y2] = P(sk.arrowTo);
+      this.skArrow.setAttribute("x1", x1.toFixed(3));
+      this.skArrow.setAttribute("y1", y1.toFixed(3));
+      this.skArrow.setAttribute("x2", x2.toFixed(3));
+      this.skArrow.setAttribute("y2", y2.toFixed(3));
+      this.skArrow.style.display = "";
+    } else {
+      this.skArrow.style.display = "none";
+    }
   }
 
   private hideText(): void {
     this.clearTextTimers();
     this.text.classList.remove("on", "fading", "pop");
-    this.shown = null;
   }
 
   private clearTextTimers(): void {

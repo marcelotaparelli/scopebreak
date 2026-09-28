@@ -28,6 +28,25 @@ export function decideEchoText(current: ShownEcho | null, incoming: EchoFeedback
   return "keep";
 }
 
+/** The feedback plate (text + Impact Sketch live in ONE box: shown, faded, replaced together). */
+export interface EchoSlot extends ShownEcho {
+  sketch: boolean;
+}
+
+export function applyEchoSlot(
+  slot: EchoSlot | null, incoming: EchoFeedback, hasSketch: boolean, nowMs: number, cfg: ShotEchoConfig,
+): { action: EchoTextAction; slot: EchoSlot | null } {
+  const action = decideEchoText(slot, incoming, nowMs, cfg);
+  if (action === "replace") return { action, slot: { corrected: incoming.corrected, shownAtMs: nowMs, sketch: hasSketch } };
+  if (action === "clear") return { action, slot: null };
+  return { action, slot };
+}
+
+/** Slot content still on screen at `nowMs` (null once its timeline ended). */
+export function echoSlotAt(slot: EchoSlot | null, nowMs: number, cfg: ShotEchoConfig): EchoSlot | null {
+  return slot && nowMs - slot.shownAtMs < echoTextTimeline(cfg).totalMs ? slot : null;
+}
+
 /** Text timeline: full opacity, then a smooth fade that ENDS at feedbackDurationMs. */
 export function echoTextTimeline(cfg: ShotEchoConfig): { holdMs: number; fadeMs: number; totalMs: number } {
   const totalMs = Math.max(0, cfg.feedbackDurationMs);
