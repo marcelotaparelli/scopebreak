@@ -138,11 +138,12 @@ const ARROWS: Record<string, string> = {
 };
 
 /**
- * Correction text. Values are rounded UP to 0.1° (following them reaches the
- * valid region); a component under 25% of the dominant one is dropped so the
- * player reads ONE clear instruction.
+ * Correction split into display parts. Values are rounded UP to 0.1°
+ * (following them reaches the valid region); a component under 25% of the
+ * dominant one is dropped so the player reads ONE clear instruction.
+ * Horizontal first, then vertical.
  */
-export function formatCorrection(c: Correction): { arrow: string; text: string } {
+export function correctionParts(c: Correction): { arrow: string; values: string[]; dirs: string[]; sh: number; sv: number } {
   const ah = Math.abs(c.h), av = Math.abs(c.v);
   const major = Math.max(ah, av);
   const useH = ah >= 0.05 && ah >= major * 0.25;
@@ -150,9 +151,16 @@ export function formatCorrection(c: Correction): { arrow: string; text: string }
   const up = (x: number): string => (Math.ceil(x * 10 - 1e-9) / 10).toFixed(1);
   const sh = useH ? Math.sign(c.h) : 0;
   const sv = useV ? Math.sign(c.v) : 0;
-  const parts: string[] = [];
-  if (useH) parts.push(`${up(ah)}° ${c.h > 0 ? "RIGHT" : "LEFT"}`);
-  if (useV) parts.push(`${up(av)}° ${c.v > 0 ? "UP" : "DOWN"}`);
-  if (parts.length === 0) return { arrow: "·", text: `<0.1°` };
-  return { arrow: ARROWS[`${sh},${sv}`] ?? "·", text: parts.join(" + ") };
+  const values: string[] = [];
+  const dirs: string[] = [];
+  if (useH) { values.push(`${up(ah)}°`); dirs.push(c.h > 0 ? "RIGHT" : "LEFT"); }
+  if (useV) { values.push(`${up(av)}°`); dirs.push(c.v > 0 ? "UP" : "DOWN"); }
+  return { arrow: ARROWS[`${sh},${sv}`] ?? "·", values, dirs, sh, sv };
+}
+
+/** One-line correction text, e.g. "0.3° RIGHT + 0.2° UP". */
+export function formatCorrection(c: Correction): { arrow: string; text: string } {
+  const p = correctionParts(c);
+  if (p.values.length === 0) return { arrow: "·", text: `<0.1°` };
+  return { arrow: p.arrow, text: p.values.map((v, i) => `${v} ${p.dirs[i]}`).join(" + ") };
 }

@@ -1,5 +1,6 @@
 import type { ShotEchoConfig } from "../config/shotEchoConfig.js";
 import { applyEchoSlot, echoTextTimeline, type EchoSlot } from "./EchoDisplayPolicy.js";
+import type { EchoCopy } from "./EchoCopy.js";
 import type { ImpactSketch, SketchPoint } from "./ImpactSketch.js";
 import type { EchoFeedback } from "./ShotEcho.js";
 
@@ -26,9 +27,11 @@ export class ShotEchoRenderer {
   private mark: SVGPathElement;
   private fix: SVGLineElement;
   private text: HTMLElement;
+  private head: HTMLElement;
   private glyph: HTMLElement;
-  private title: HTMLElement;
-  private detail: HTMLElement;
+  private value: HTMLElement;
+  private dir: HTMLElement;
+  private desc: HTMLElement[];
   // Impact Sketch nodes (head-radius units, y up → drawn with y flipped)
   private sketch: SVGSVGElement;
   private skValid: SVGCircleElement;
@@ -74,27 +77,32 @@ export class ShotEchoRenderer {
       this.sketch.appendChild(el);
     }
 
-    this.text = document.createElement("div");
-    this.text.className = "echo-text";
-    this.glyph = document.createElement("span");
-    this.glyph.className = "echo-glyph";
-    this.title = document.createElement("span");
-    this.title.className = "echo-title";
-    this.detail = document.createElement("div");
-    this.detail.className = "echo-detail";
-    const line = document.createElement("div");
-    line.append(this.glyph, this.title);
-    const lines = document.createElement("div");
-    lines.className = "echo-lines";
-    lines.append(line, this.detail);
-    this.text.append(this.sketch, lines);
+    // plate: discreet header, then [ Impact Sketch | value / direction / description ]
+    const div = (cls: string, tag = "div"): HTMLElement => {
+      const el = document.createElement(tag);
+      el.className = cls;
+      return el;
+    };
+    this.text = div("echo-text");
+    this.head = div("echo-head");
+    this.glyph = div("echo-glyph", "span");
+    this.value = div("echo-value", "span");
+    this.dir = div("echo-dir");
+    this.desc = [div("echo-desc"), div("echo-desc")];
+    const main = div("echo-main");
+    main.append(this.glyph, this.value);
+    const right = div("echo-right");
+    right.append(main, this.dir, ...this.desc);
+    const body = div("echo-body");
+    body.append(this.sketch, right);
+    this.text.append(this.head, body);
     this.root.append(this.svg, this.text);
     parent.appendChild(this.root);
   }
 
-  show(fb: EchoFeedback, fovDeg: number, nowMs: number, sketch: ImpactSketch | null = null): void {
+  show(fb: EchoFeedback, fovDeg: number, nowMs: number, sketch: ImpactSketch | null, copy: EchoCopy | null): void {
     const next = applyEchoSlot(this.slot, fb, sketch !== null, nowMs, this.cfg);
-    if (next.action === "replace") this.showText(fb, sketch);
+    if (next.action === "replace") this.showText(fb, sketch, copy);
     else if (next.action === "clear") this.hideText();
     this.slot = next.slot;
     if (!fb.visible) return;
@@ -138,14 +146,22 @@ export class ShotEchoRenderer {
   }
 
   /** Full opacity for holdMs, then a smooth fade that ends at feedbackDurationMs (sketch included). */
-  private showText(fb: EchoFeedback, sketch: ImpactSketch | null): void {
+  private showText(fb: EchoFeedback, sketch: ImpactSketch | null, copy: EchoCopy | null): void {
     const tl = echoTextTimeline(this.cfg);
     this.clearTextTimers();
     this.text.style.setProperty("--echo-fade", `${tl.fadeMs}ms`);
     this.text.className = `echo-text tone-${fb.tone} on${sketch ? " has-sketch" : ""}`;
-    this.glyph.textContent = fb.glyph;
-    this.title.textContent = fb.title;
-    this.detail.textContent = fb.detail;
+    const c: EchoCopy = copy ?? { header: "SHOT ECHO", glyph: fb.glyph, value: fb.title, direction: "", description: fb.detail ? [fb.detail] : [] };
+    this.head.textContent = c.header;
+    this.glyph.textContent = c.glyph;
+    this.glyph.style.display = c.glyph ? "" : "none";
+    this.value.textContent = c.value;
+    this.dir.textContent = c.direction;
+    this.dir.style.display = c.direction ? "" : "none";
+    this.desc.forEach((el, i) => {
+      el.textContent = c.description[i] ?? "";
+      el.style.display = c.description[i] ? "" : "none";
+    });
     this.drawSketch(sketch);
     this.restart(this.text);
     this.fadeTimer = setTimeout(() => this.text.classList.add("fading"), tl.holdMs);

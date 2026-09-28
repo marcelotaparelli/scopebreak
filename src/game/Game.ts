@@ -14,6 +14,7 @@ import { ShotCapture } from "../combat/ShotCapture.js";
 import type { ShotSnapshot } from "../combat/ShotSnapshot.js";
 import { ShotEcho } from "../feedback/ShotEcho.js";
 import { buildImpactSketch } from "../feedback/ImpactSketch.js";
+import { describeEcho } from "../feedback/EchoCopy.js";
 import { ShotEchoRenderer } from "../feedback/ShotEchoRenderer.js";
 import { FFAMode } from "../modes/FFAMode.js";
 import { TrainingMode } from "../modes/TrainingMode.js";
@@ -540,7 +541,7 @@ export class Game {
     const fb = this.shotEcho.onShot(s);
     if (!fb) return;
     const sk = buildImpactSketch(s, fb.analysis, shotEchoConfig);
-    this.echoFx.show(fb, s.fovDeg, s.timeMs, fb.visible ? sk.sketch : null);
+    this.echoFx.show(fb, s.fovDeg, s.timeMs, fb.visible ? sk.sketch : null, describeEcho(fb, s.ads));
     if (fb.sound === "tick") this.combatFx.echoTick();
     else if (fb.sound === "corrected") this.combatFx.echoCorrected();
     const a = fb.analysis;

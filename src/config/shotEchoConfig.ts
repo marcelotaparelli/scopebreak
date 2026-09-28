@@ -30,7 +30,7 @@ export const shotEchoConfig: ShotEchoConfig = {
   correctionRecognitionWindowMs: 3000,
   validRegionInset: 0.75,
   impactSketchEnabled: true,
-  impactSketchSize: 72,
+  impactSketchSize: 104,
   impactSketchShowArrow: true,
   impactSketchShowCenter: true,
 };
