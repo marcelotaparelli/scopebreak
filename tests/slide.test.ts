@@ -95,7 +95,7 @@ describe("slide-jump momentum", () => {
     expect(m.horizontalSpeed()).toBeCloseTo(slideSpeed * movementConfig.slideJumpMomentumRetention, 6);
     expect(movementConfig.slideJumpMomentumRetention).toBeGreaterThanOrEqual(0.99);
     // (same-frame gravity already applied)
-    expect(m.body.vy).toBeCloseTo(movementConfig.slideJumpVerticalForce - (23 * DT), 5);
+    expect(m.body.vy).toBeCloseTo(movementConfig.slideJumpVerticalForce - (movementConfig.gravity * DT), 5);
     expect(movementConfig.slideJumpVerticalForce).toBeGreaterThan(movementConfig.jumpForce);
   });
 
@@ -109,7 +109,7 @@ describe("slide-jump momentum", () => {
 describe("air momentum preservation", () => {
   test("airborne does not clamp tech speed back to runSpeed", () => {
     const m = runner(0);
-    m.reset(0, 5, 42);
+    m.reset(0, 12, 42); // high enough to stay airborne for the whole loop
     m.body.grounded = false;
     m.body.vx = 14;
     m.body.vy = 0;

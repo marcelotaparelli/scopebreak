@@ -8,7 +8,8 @@ export interface MovementConfig {
   groundFriction: number;
   groundOverspeedDecay: number; // 1/s: excess above runSpeed bleeds off while running (no permanent ratchet)
   jumpForce: number;
-  gravity: number;
+  gravity: number; // ascending gravity (m/s²)
+  fallGravityMultiplier: number; // gravity × this while vy ≤ 0: short apex, aggressive drop
   // air
   airAcceleration: number;
   airControl: number; // 0..1 fraction of wish applied per second curve
@@ -55,8 +56,9 @@ export const movementConfig: MovementConfig = {
   groundDeceleration: 55,
   groundFriction: 9.5,
   groundOverspeedDecay: 2.5,
-  jumpForce: 8.2,
-  gravity: 23,
+  jumpForce: 10.0, // h ≈ 1.43m, airtime ≈ 0.53s
+  gravity: 34,
+  fallGravityMultiplier: 1.35, // falling g ≈ 45.9
 
   airAcceleration: 32,
   airControl: 0.85,
@@ -74,7 +76,7 @@ export const movementConfig: MovementConfig = {
 
   slideJumpHorizontalMultiplier: 1.07,
   slideJumpMomentumRetention: 1.0,
-  slideJumpVerticalForce: 10.0, // apex ≈2.1m vs normal 1.4m: clears 2m ledges normal jump can't
+  slideJumpVerticalForce: 12.2, // apex ≈2.14m vs normal 1.43m (clears 2m ledges), airtime ≈ 0.66s
 
   flowLandingWindowMs: 200,
   flowLandingRetention: 1.0, // skilled flow landing keeps the flow: preserve, never boost

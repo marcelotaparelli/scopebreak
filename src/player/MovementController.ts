@@ -256,8 +256,8 @@ export class MovementController {
       // late flow-landing buffer is handled on touchdown
     }
 
-    // gravity
-    b.vy -= cfg.gravity * dt;
+    // gravity: stronger once falling (vy ≤ 0) — apex → DOWN, no float
+    b.vy -= cfg.gravity * (b.vy > 0 ? 1 : cfg.fallGravityMultiplier) * dt;
     if (b.vy < -30) b.vy = -30;
 
     // integrate + collide

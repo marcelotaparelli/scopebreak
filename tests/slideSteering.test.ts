@@ -184,7 +184,7 @@ describe("10. curved flow: direction + speed survive jump and flow landing", () 
       if (steering) yaw -= 90 * DEG * STEP;
       let jump = false;
       if (phase === "slide" && t >= 1400) { jump = true; }
-      if (phase === "air" && !pressed && b.vy < 0 && (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * b.y)) / C.gravity <= 0.12) {
+      if (phase === "air" && !pressed && b.vy < 0 && (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * C.fallGravityMultiplier * b.y)) / (C.gravity * C.fallGravityMultiplier) <= 0.12) {
         shift = true; shiftAt = t; pressed = true;
       }
       const hBefore = heading(m), sBefore = m.horizontalSpeed();

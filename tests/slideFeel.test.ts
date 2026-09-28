@@ -48,7 +48,7 @@ function surf(cycles: number, jumpDelayMs: number): { pre: number[]; post: numbe
     const b = m.body;
     if (!started && t >= 1000) { shift = true; shiftAt = t; started = true; }
     if (!b.grounded && !pressed && b.vy < 0) {
-      const tLand = (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * b.y)) / C.gravity;
+      const tLand = (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * C.fallGravityMultiplier * b.y)) / (C.gravity * C.fallGravityMultiplier);
       if (tLand <= 0.12) { shift = true; shiftAt = t; pressed = true; }
     }
     const jump = m.sliding && slideStart >= 0 && t - slideStart >= jumpDelayMs;
@@ -162,7 +162,7 @@ function flowChain(cycles: number, spaceMs: number, holdShift = false): { cyc: F
     const now = (fr * 1000) / 60;
     const b = m.body;
     if (!started && now >= 1000) { shift = true; shiftAt = now; started = true; landAt = now; }
-    if (!holdShift && !b.grounded && !pressed && b.vy < 0 && (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * b.y)) / C.gravity <= 0.12) {
+    if (!holdShift && !b.grounded && !pressed && b.vy < 0 && (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * C.fallGravityMultiplier * b.y)) / (C.gravity * C.fallGravityMultiplier) <= 0.12) {
       shift = true; shiftAt = now; pressed = true;
     }
     if (landAt >= 0 && now - landAt >= spaceMs - 1e-6) { jumpQ = true; landAt = -1; }

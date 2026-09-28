@@ -32,7 +32,7 @@ function airRun(o: { camDeg: number; camRate?: number; fw: number; strafe: numbe
       yaw -= d * DEG;
     }
     const b = m.body;
-    if (flow && take >= 0 && !b.grounded && !pressed && b.vy < 0 && (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * b.y)) / C.gravity <= 0.12) {
+    if (flow && take >= 0 && !b.grounded && !pressed && b.vy < 0 && (b.vy + Math.sqrt(b.vy * b.vy + 2 * C.gravity * C.fallGravityMultiplier * b.y)) / (C.gravity * C.fallGravityMultiplier) <= 0.12) {
       shift = true; shiftAt = now; pressed = true;
     }
     for (let k = 0; k < 2; k++) {

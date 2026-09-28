@@ -85,7 +85,8 @@ export class DebugPanel {
     this.num(m, "groundDecel", () => mc().groundDeceleration, (v) => (mc().groundDeceleration = v), 5, 120, 1);
     this.num(m, "groundFriction", () => mc().groundFriction, (v) => (mc().groundFriction = v), 0, 20, 0.1);
     this.num(m, "jumpForce", () => mc().jumpForce, (v) => (mc().jumpForce = v), 4, 14, 0.1);
-    this.num(m, "gravity", () => mc().gravity, (v) => (mc().gravity = v), 10, 40, 0.5);
+    this.num(m, "gravity", () => mc().gravity, (v) => (mc().gravity = v), 10, 70, 0.5);
+    this.num(m, "fallGravityMult", () => mc().fallGravityMultiplier, (v) => (mc().fallGravityMultiplier = v), 1, 2.5, 0.05);
 
     const a = this.section("AIR");
     this.num(a, "airAccel", () => mc().airAcceleration, (v) => (mc().airAcceleration = v), 5, 80, 1);
