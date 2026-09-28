@@ -19,6 +19,8 @@ export class TrainingTarget {
   readonly motion: TargetMotion;
   health = 100;
   alive = true;
+  /** Bumps on every respawn (SHOT ECHO: a correction never carries over to a new life). */
+  lifeId = 0;
   basePos: THREE.Vector3;
   private respawnAt = 0;
   private bodyMesh: THREE.Mesh;
@@ -64,6 +66,7 @@ export class TrainingTarget {
       if (nowMs >= this.respawnAt) {
         this.alive = true;
         this.health = 100;
+        this.lifeId++;
         this.group.visible = true;
       } else return;
     }
