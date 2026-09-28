@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { BOT_NAMES, FFA_SPAWNS, ffaMatchConfig } from "../config/ffaConfig.js";
 import { gameplayConfig } from "../config/gameplayConfig.js";
+import { shotEchoConfig } from "../config/shotEchoConfig.js";
 import { weaponConfigs, weaponOrder, type WeaponId } from "../config/weaponConfigs.js";
 import { botHitChance, SimpleBot } from "../bots/SimpleBot.js";
 import { Telemetry } from "../debug/Telemetry.js";
@@ -9,6 +10,10 @@ import { MovementController } from "../player/MovementController.js";
 import { classifyState } from "../player/PlayerState.js";
 import { adsSpreadDeg, decideLmbEdge, detectSkillEvents, isPrecisionReady, resolvePendingQuickshot } from "../player/movementRules.js";
 import { HitDetection } from "../combat/HitDetection.js";
+import { ShotCapture } from "../combat/ShotCapture.js";
+import type { ShotSnapshot } from "../combat/ShotSnapshot.js";
+import { ShotEcho } from "../feedback/ShotEcho.js";
+import { ShotEchoRenderer } from "../feedback/ShotEchoRenderer.js";
 import { FFAMode } from "../modes/FFAMode.js";
 import { TrainingMode } from "../modes/TrainingMode.js";
 import { WeaponController } from "../weapons/WeaponController.js";
@@ -83,6 +88,10 @@ export class Game {
   private elMatchEnd!: HTMLElement;
   private combatFx: CombatFeedback;
   private skillFx: SkillFeedback;
+  // SHOT ECHO (training only): observes real shots, never alters them
+  private shotCapture = new ShotCapture();
+  private shotEcho = new ShotEcho(shotEchoConfig);
+  private echoFx!: ShotEchoRenderer;
   private gun = new THREE.Group();
   private gunKick = 0;
 
@@ -159,6 +168,7 @@ export class Game {
       <div id="match-end" style="display:none"></div>
       <div id="stats-box"></div>`;
     this.container.appendChild(hud);
+    this.echoFx = new ShotEchoRenderer(hud, shotEchoConfig);
 
     // crosshair arms
     const arms = hud.querySelectorAll<HTMLElement>("#crosshair .l");
@@ -474,8 +484,23 @@ export class Game {
     const spread = this.currentAdsSpread(nowMs);
 
     const origin = this.camera.position.clone();
-    const dir = HitDetection.applySpread(this.cam.forwardDir(), spread);
+    const aimDir = this.cam.forwardDir();
+    const dir = HitDetection.applySpread(aimDir, spread);
     const res = this.hits.resolve(origin, dir, 220, this.targets, this.arena.solidMeshes);
+    // SHOT ECHO snapshot: this IS the effective fire instant (buffered
+    // quickshots arrive here when they fire), taken before damage is applied
+    const echoSnap = this.appMode === "training" && shotEchoConfig.enabled
+      ? this.shotCapture.capture({
+        nowMs, weaponId: this.weapon.currentId, camera: this.camera, aimDir, shotDir: dir,
+        spreadDeg: spread, preciseSpreadDeg: gameplayConfig.adsSpreadDeg,
+        ads: this.weapon.adsActive, adsElapsedMs: this.weapon.adsElapsedMs(nowMs),
+        snapPrecisionMs: this.weapon.config.snapPrecisionMs,
+        sliding: this.move.sliding, airborne: !this.move.body.grounded,
+        horizontalSpeed: this.move.horizontalSpeed(), result: res,
+        targets: this.targets, walls: this.arena.solidMeshes,
+        maximumAnalysisAngleDeg: shotEchoConfig.maximumAnalysisAngleDeg,
+      })
+      : null;
 
     this.cam.kickRecoil(this.weapon.config.recoilKick);
     this.gunKick = 1;
@@ -506,6 +531,32 @@ export class Game {
       this.mode.registerMiss();
       if (res.blocked) this.combatFx.impact(res.point);
     }
+    if (echoSnap) this.presentShotEcho(echoSnap);
+  }
+
+  /** Analyse → one message + ghost + sound → debug line. Runs once per real shot. */
+  private presentShotEcho(s: ShotSnapshot): void {
+    const fb = this.shotEcho.onShot(s);
+    if (!fb) return;
+    this.echoFx.show(fb, s.fovDeg);
+    if (fb.sound === "tick") this.combatFx.echoTick();
+    else if (fb.sound === "corrected") this.combatFx.echoCorrected();
+    const a = fb.analysis;
+    const d = (v: { x: number; y: number; z: number }): string => `${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)}`;
+    const st = this.shotEcho.stats;
+    const row = (k: string, v: string): string => `<div class="stat"><span>${k}</span><b>${v}</b></div>`;
+    this.debug.setShotEcho(
+      row("weapon / ADS", `${s.weaponId} / ${s.ads ? `on ${s.adsElapsedMs.toFixed(0)}ms (snap ${s.snapPrecisionMs})` : "hip"}`) +
+      row("aim dir", d(s.aimDir)) +
+      row("shot dir", d(s.shotDir)) +
+      row("spread", `${s.spreadDeg.toFixed(2)}°`) +
+      row("hit", `${a.hit}${s.result.blocked ? " (blocked)" : ""}`) +
+      row("target", a.target ? `#${a.target.id} life ${a.target.lifeId}` : "—") +
+      row("correction", a.correction ? `h ${a.correction.h.toFixed(2)}° v ${a.correction.v.toFixed(2)}°` : "—") +
+      row("class", `${a.kind}${fb.corrected ? " ✓CORRECTED" : ""}`) +
+      row("validity", a.target ? `geometric · aimOnHead ${a.aimOnHead} · shotOnHead ${a.shotOnHead}` : "no valid target") +
+      row("totals", `n${st.analyzed} hs${st.headshots} body${st.bodyShots} near${st.nearMisses} H${st.horizontalErrors} V${st.verticalErrors} spr${st.spreadLimited} ads${st.adsEarly} ✓${st.corrected}`),
+    );
   }
 
   // ---------------- FFA ----------------
@@ -518,6 +569,8 @@ export class Game {
   private enterTraining(): void {
     this.appMode = "training";
     this.clearPendingQuickshot();
+    this.shotEcho.reset();
+    this.echoFx.hide();
     for (const t of this.targets) t.group.visible = true;
     for (const b of this.bots) this.scene.remove(b.group);
     this.bots = [];

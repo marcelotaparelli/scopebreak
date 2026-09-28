@@ -77,6 +77,18 @@ export class CombatFeedback {
     window.setTimeout(() => this.blip(1320, 160, 0.22), 70);
   }
 
+  /** SHOT ECHO: soft, short analysis tick for a near miss / body shot (sits under the gun). */
+  echoTick(): void {
+    this.blip(2600, 26, 0.045, "sine");
+  }
+
+  /** SHOT ECHO: CORRECTED — rising soft triad, after the headshot chime so both read. */
+  echoCorrected(): void {
+    window.setTimeout(() => this.blip(784, 70, 0.1, "triangle"), 170);
+    window.setTimeout(() => this.blip(1047, 70, 0.1, "triangle"), 230);
+    window.setTimeout(() => this.blip(1568, 140, 0.11, "triangle"), 290);
+  }
+
   /** Kill confirmation: distinct two-tone chime + gold marker pulse. */
   killConfirm(headshot: boolean): void {
     this.showMarker(headshot);

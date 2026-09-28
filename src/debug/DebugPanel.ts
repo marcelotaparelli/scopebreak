@@ -1,5 +1,6 @@
 import { gameplayConfig } from "../config/gameplayConfig.js";
 import { movementConfig } from "../config/movementConfig.js";
+import { shotEchoConfig } from "../config/shotEchoConfig.js";
 import { weaponConfigs, weaponOrder } from "../config/weaponConfigs.js";
 import type { MovementController } from "../player/MovementController.js";
 import type { WeaponController } from "../weapons/WeaponController.js";
@@ -8,6 +9,7 @@ import type { WeaponController } from "../weapons/WeaponController.js";
 export class DebugPanel {
   private root: HTMLElement;
   private statsEl: HTMLElement;
+  private echoEl: HTMLElement;
   private fpsSamples: number[] = [];
 
   constructor(
@@ -34,6 +36,7 @@ export class DebugPanel {
     });
 
     this.statsEl = document.createElement("div");
+    this.echoEl = document.createElement("div");
     this.build();
   }
 
@@ -65,6 +68,19 @@ export class DebugPanel {
       val.textContent = String(v);
     };
     row.append(lab, input, val);
+    section.appendChild(row);
+  }
+
+  private bool(section: HTMLElement, label: string, get: () => boolean, set: (v: boolean) => void): void {
+    const row = document.createElement("div");
+    row.className = "row";
+    const lab = document.createElement("label");
+    lab.textContent = label;
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = get();
+    input.onchange = (): void => set(input.checked);
+    row.append(lab, input);
     section.appendChild(row);
   }
 
@@ -134,8 +150,23 @@ export class DebugPanel {
       this.num(q, `${id}.snapMs`, () => cfg.snapPrecisionMs, (v) => (cfg.snapPrecisionMs = v), 0, 250, 5);
     }
 
+    const e = this.section("SHOT ECHO (training)");
+    const ec = shotEchoConfig;
+    this.bool(e, "enabled", () => ec.enabled, (v) => (ec.enabled = v));
+    this.num(e, "feedbackMs", () => ec.feedbackDurationMs, (v) => (ec.feedbackDurationMs = v), 100, 3000, 50);
+    this.num(e, "ghostMs", () => ec.ghostReticleDurationMs, (v) => (ec.ghostReticleDurationMs = v), 50, 1500, 10);
+    this.num(e, "maxAngle°", () => ec.maximumAnalysisAngleDeg, (v) => (ec.maximumAnalysisAngleDeg = v), 0.5, 15, 0.5);
+    this.num(e, "correctWindowMs", () => ec.correctionRecognitionWindowMs, (v) => (ec.correctionRecognitionWindowMs = v), 500, 10000, 100);
+    this.num(e, "validInset", () => ec.validRegionInset, (v) => (ec.validRegionInset = v), 0.3, 1, 0.05);
+    e.appendChild(this.echoEl);
+
     const st = this.section("STATE");
     st.appendChild(this.statsEl);
+  }
+
+  /** Last analysed shot + aggregate counters (updated per shot, not per frame). */
+  setShotEcho(html: string): void {
+    this.echoEl.innerHTML = html;
   }
 
   recordFrame(dtMs: number): void {
